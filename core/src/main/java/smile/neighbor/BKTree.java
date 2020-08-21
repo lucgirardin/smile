@@ -1,18 +1,19 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.neighbor;
 
@@ -20,14 +21,13 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
 import smile.math.distance.Metric;
 
 /**
  * A BK-tree is a metric tree specifically adapted to discrete metric spaces.
  * For simplicity, let us consider integer discrete metric d(x,y). Then, BK-tree
- * is defined in the following way. An arbitrary element a is selected as root
- * root. Root may have zero or more subtrees. The k-th subtree is
+ * is defined in the following way. An arbitrary element a is selected as root.
+ * Root may have zero or more subtrees. The k-th subtree is
  * recursively built of all elements b such that d(a,b) = k. BK-trees can be
  * used for approximate string matching in a dictionary.
  * <p>
@@ -55,7 +55,7 @@ import smile.math.distance.Metric;
  * @author Haifeng Li
  */
 public class BKTree<E> implements RNNSearch<E, E>, Serializable {
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
     
     /**
      * The root in the BK-tree.
@@ -70,7 +70,7 @@ public class BKTree<E> implements RNNSearch<E, E>, Serializable {
          */
         int index;
         /**
-         * The children nodes. Note that the i-<i>th</i> root's distance to
+         * The children nodes. The i-th child's distance to
          * the parent is i.
          */
         ArrayList<Node> children;
@@ -114,7 +114,7 @@ public class BKTree<E> implements RNNSearch<E, E>, Serializable {
     }
 
     /**
-     * The root root of BK-tree.
+     * The root of BK-tree.
      */
     private Node root;
     /**
@@ -127,10 +127,6 @@ public class BKTree<E> implements RNNSearch<E, E>, Serializable {
      * The number of nodes in the tree.
      */
     private int count = 0;
-    /**
-     * Whether to exclude query object self from the neighborhood.
-     */
-    private boolean identicalExcluded = true;
 
     /**
      * Constructor.
@@ -180,21 +176,6 @@ public class BKTree<E> implements RNNSearch<E, E>, Serializable {
     }
 
     /**
-     * Set if exclude query object self from the neighborhood.
-     */
-    public BKTree<E> setIdenticalExcluded(boolean excluded) {
-        identicalExcluded = excluded;
-        return this;
-    }
-
-    /**
-     * Get whether if query object self be excluded from the neighborhood.
-     */
-    public boolean isIdenticalExcluded() {
-        return identicalExcluded;
-    }
-
-    /**
      * Do a range search in the given subtree.
      * @param node the root of subtree.
      * @param q the query object.
@@ -204,10 +185,8 @@ public class BKTree<E> implements RNNSearch<E, E>, Serializable {
     private void search(Node node, E q, int k, List<Neighbor<E, E>> neighbors) {
         int d = (int) distance.d(node.object, q);
 
-        if (d <= k) {
-            if (node.object != q || !identicalExcluded) {
-                neighbors.add(new Neighbor<>(node.object, node.object, node.index, d));
-            }
+        if (d <= k && node.object != q) {
+            neighbors.add(new Neighbor<>(node.object, node.object, node.index, d));
         }
 
         if (node.children != null) {
@@ -224,7 +203,7 @@ public class BKTree<E> implements RNNSearch<E, E>, Serializable {
 
     @Override
     public void range(E q, double radius, List<Neighbor<E, E>> neighbors) {
-        if (radius != (int) radius) {
+        if (radius <= 0 || radius != (int) radius) {
             throw new IllegalArgumentException("The parameter radius has to be an integer: " + radius);
         }
         
@@ -235,9 +214,9 @@ public class BKTree<E> implements RNNSearch<E, E>, Serializable {
      * Search the neighbors in the given radius of query object, i.e.
      * d(q, v) &le; radius.
      *
-     * @param q 	the query object.
-     * @param radius	the radius of search range from target.
-     * @param neighbors	the list to store found neighbors in the given range on output.
+     * @param q the query object.
+     * @param radius the radius of search range from target.
+     * @param neighbors the list to store found neighbors in the given range on output.
      */
     public void range(E q, int radius, List<Neighbor<E, E>> neighbors) {
         search(root, q, radius, neighbors);

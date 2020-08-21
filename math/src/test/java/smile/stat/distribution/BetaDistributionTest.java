@@ -1,18 +1,19 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.stat.distribution;
 
@@ -21,6 +22,8 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import smile.math.MathEx;
+
 import static org.junit.Assert.*;
 
 /**
@@ -54,24 +57,23 @@ public class BetaDistributionTest {
     @Test
     public void testBetaDistribution() {
         System.out.println("BetaDistribution");
+        MathEx.setSeed(19650218); // to get repeatable results.
         BetaDistribution instance = new BetaDistribution(3, 2.1);
-        double[] data = new double[1000];
-        for (int i = 0; i < data.length; i++)
-            data[i] = instance.rand();
-        BetaDistribution est = new BetaDistribution(data);
-        assertEquals(3, est.getAlpha(), 5E-1);
-        assertEquals(2.1, est.getBeta(), 5E-1);
+        double[] data = instance.rand(1000);
+        BetaDistribution est = BetaDistribution.fit(data);
+        assertEquals(3.31, est.getAlpha(), 1E-2);
+        assertEquals(2.31, est.getBeta(), 1E-2);
     }
 
     /**
-     * Test of npara method, of class Beta.
+     * Test of length method, of class Beta.
      */
     @Test
-    public void testNpara() {
-        System.out.println("npara");
+    public void testLength() {
+        System.out.println("length");
         BetaDistribution instance = new BetaDistribution(2, 5);
         instance.rand();
-        assertEquals(2, instance.npara());
+        assertEquals(2, instance.length());
     }
 
     /**
@@ -86,14 +88,14 @@ public class BetaDistributionTest {
     }
 
     /**
-     * Test of var method, of class Beta.
+     * Test of variance method, of class Beta.
      */
     @Test
-    public void testVar() {
-        System.out.println("var");
+    public void testVariance() {
+        System.out.println("variance");
         BetaDistribution instance = new BetaDistribution(2, 5);
         instance.rand();
-        assertEquals(0.0255102, instance.var(), 1E-7);
+        assertEquals(0.0255102, instance.variance(), 1E-7);
     }
 
     /**

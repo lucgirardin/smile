@@ -1,23 +1,24 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.stat.hypothesis;
 
+import smile.math.MathEx;
 import smile.math.special.Beta;
-import smile.math.Math;
 
 /**
  * Student's t test. A t-test is any statistical hypothesis test in which the test statistic has
@@ -62,27 +63,38 @@ import smile.math.Math;
  */
 public class TTest {
     /**
+     * A character string indicating what type of test was performed.
+     */
+    public final String method;
+
+    /**
      * The degree of freedom of t-statistic.
      */
-    public double df;
+    public final double df;
 
     /**
      * t-statistic
      */
-    public double t;
+    public final double t;
 
     /**
      * p-value
      */
-    public double pvalue;
+    public final double pvalue;
 
     /**
      * Constructor.
      */
-    private TTest(double t, double df, double pvalue) {
+    private TTest(String method, double t, double df, double pvalue) {
+        this.method = method;
         this.t = t;
         this.df = df;
         this.pvalue = pvalue;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s t-test(t = %.4f, df = %.3f, p-value = %G)", method, t, df, pvalue);
     }
 
     /**
@@ -93,15 +105,15 @@ public class TTest {
     public static TTest test(double[] x, double mean) {
         int n = x.length;
 
-        double mu = Math.mean(x);
-        double var = Math.var(x);
+        double mu = MathEx.mean(x);
+        double var = MathEx.var(x);
 
         int df = n - 1;
 
         double t = (mu - mean) / Math.sqrt(var/n);
         double p = Beta.regularizedIncompleteBetaFunction(0.5 * df, 0.5, df / (df + t * t));
 
-        return new TTest(t, df, p);
+        return new TTest("One Sample", t, df, p);
     }
 
     /**
@@ -127,11 +139,11 @@ public class TTest {
             int n1 = x.length;
             int n2 = y.length;
 
-            double mu1 = Math.mean(x);
-            double var1 = Math.var(x);
+            double mu1 = MathEx.mean(x);
+            double var1 = MathEx.var(x);
 
-            double mu2 = Math.mean(y);
-            double var2 = Math.var(y);
+            double mu2 = MathEx.mean(y);
+            double var2 = MathEx.var(y);
 
             int df = n1 + n2 - 2;
 
@@ -140,23 +152,23 @@ public class TTest {
             double t = (mu1 - mu2) / Math.sqrt(svar * (1.0 / n1 + 1.0 / n2));
             double p = Beta.regularizedIncompleteBetaFunction(0.5 * df, 0.5, df / (df + t * t));
 
-            return new TTest(t, df, p);
+            return new TTest("Equal Variance Two Sample", t, df, p);
         } else {
             int n1 = x.length;
             int n2 = y.length;
 
-            double mu1 = Math.mean(x);
-            double var1 = Math.var(x);
+            double mu1 = MathEx.mean(x);
+            double var1 = MathEx.var(x);
 
-            double mu2 = Math.mean(y);
-            double var2 = Math.var(y);
+            double mu2 = MathEx.mean(y);
+            double var2 = MathEx.var(y);
 
-            double df = Math.sqr(var1 / n1 + var2 / n2) / (Math.sqr(var1 / n1) / (n1 - 1) + Math.sqr(var2 / n2) / (n2 - 1));
+            double df = MathEx.sqr(var1 / n1 + var2 / n2) / (MathEx.sqr(var1 / n1) / (n1 - 1) + MathEx.sqr(var2 / n2) / (n2 - 1));
 
             double t = (mu1 - mu2) / Math.sqrt(var1 / n1 + var2 / n2);
             double p = Beta.regularizedIncompleteBetaFunction(0.5 * df, 0.5, df / (df + t * t));
 
-            return new TTest(t, df, p);
+            return new TTest("Unequal Variance Two Sample", t, df, p);
         }
     }
 
@@ -165,16 +177,16 @@ public class TTest {
      * different means. Small values of p-value indicate that the two arrays
      * have significantly different means.
      */
-    public static TTest pairedTest(double[] x, double[] y) {
+    public static TTest testPaired(double[] x, double[] y) {
         if (x.length != y.length) {
             throw new IllegalArgumentException("Input vectors have different size");
         }
 
-        double mu1 = Math.mean(x);
-        double var1 = Math.var(x);
+        double mu1 = MathEx.mean(x);
+        double var1 = MathEx.var(x);
 
-        double mu2 = Math.mean(y);
-        double var2 = Math.var(y);
+        double mu2 = MathEx.mean(y);
+        double var2 = MathEx.var(y);
 
         int n = x.length;
         int df = n - 1;
@@ -189,7 +201,7 @@ public class TTest {
         double t = (mu1 - mu2) / sd;
         double p = Beta.regularizedIncompleteBetaFunction(0.5 * df, 0.5, df / (df + t * t));
 
-        return new TTest(t, df, p);
+        return new TTest("Paired", t, df, p);
     }
 
     /**
@@ -201,11 +213,11 @@ public class TTest {
      * used in the calculation of r.
      */
     public static TTest test(double r, int df) {
-        final double TINY = 1.0e-20;
+        final double TINY = 1.0e-16;
 
         double t = r * Math.sqrt(df / ((1.0 - r + TINY) * (1.0 + r + TINY)));
         double p = Beta.regularizedIncompleteBetaFunction(0.5 * df, 0.5, df / (df + t * t));
 
-        return new TTest(t, df, p);
+        return new TTest("Pearson correlation coefficient", t, df, p);
     }
 }

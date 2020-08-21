@@ -1,22 +1,23 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.wavelet;
 
-import smile.math.Math;
+import smile.math.MathEx;
 
 /**
  * The wavelet shrinkage is a signal denoising technique based on the idea of
@@ -45,7 +46,7 @@ import smile.math.Math;
  *
  * @author Haifeng Li
  */
-public class WaveletShrinkage {
+public interface WaveletShrinkage {
     /**
      * Adaptive hard-thresholding denoising a time series with given wavelet.
      *
@@ -53,7 +54,7 @@ public class WaveletShrinkage {
      * series of size no power of 2, 0 padding can be applied.
      * @param wavelet the wavelet to transform the time series.
      */
-    public static void denoise(double[] t, Wavelet wavelet) {
+    static void denoise(double[] t, Wavelet wavelet) {
         denoise(t, wavelet, false);
     }
 
@@ -65,7 +66,7 @@ public class WaveletShrinkage {
      * @param wavelet the wavelet to transform the time series.
      * @param soft true if apply soft thresholding.
      */
-    public static void denoise(double[] t, Wavelet wavelet, boolean soft) {
+    static void denoise(double[] t, Wavelet wavelet, boolean soft) {
         wavelet.transform(t);
 
         int n = t.length;
@@ -73,7 +74,7 @@ public class WaveletShrinkage {
 
         double[] wc = new double[nh];
         System.arraycopy(t, nh, wc, 0, nh);
-        double error = Math.mad(wc) / 0.6745;
+        double error = MathEx.mad(wc) / 0.6745;
 
         double lambda = error * Math.sqrt(2 * Math.log(n));
 

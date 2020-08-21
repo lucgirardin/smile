@@ -1,18 +1,19 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.nlp.stemmer;
 
@@ -21,8 +22,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The Paice/Husk Lancaster stemming algorithm. The stemmer is a conflation
@@ -30,15 +29,17 @@ import org.slf4j.LoggerFactory;
  * easily implemented, is known to be very strong and aggressive. The stemmer
  * utilizes a single table of rules, each of which may specify
  * the removal or replacement of an ending. For details, see
- * <p>
- * Paice, Another stemmer, SIGIR Forum, 24(3), 56-61, 1990.
- * <p>
- * http://www.comp.lancs.ac.uk/computing/research/stemming/Links/paice.htm
+ *
+ * <h2>References</h2>
+ * <ol>
+ * <li> Paice, Another stemmer, SIGIR Forum, 24(3), 56-61, 1990. </li>
+ * <li> http://www.comp.lancs.ac.uk/computing/research/stemming/Links/paice.htm </li>
+ * </ol>
  *
  * @author Haifeng Li
  */
 public class LancasterStemmer implements Stemmer {
-    private static final Logger logger = LoggerFactory.getLogger(LancasterStemmer.class);
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(LancasterStemmer.class);
 
     /**
      * Array of rules
@@ -53,24 +54,19 @@ public class LancasterStemmer implements Stemmer {
      */
     private boolean stripPrefix;
 
-    private void readRules(InputStream is) {
+    /** Loads the rules. */
+    private void readRules(InputStream is) throws IOException {
         /**
          * Load rules from Lancaster_rules.txt
          */
         try (BufferedReader input = new BufferedReader(new InputStreamReader(is))) {
-            String line = null;
-            while ((line = input.readLine()) != null) {
-                String rule = line.trim();
-                if (!rule.isEmpty()) {
-                    int j = rule.indexOf(' ');
-                    if (j != -1) {
-                        rule = rule.substring(0, j);
-                    }
-                    rules.add(rule);
+            input.lines().map(line -> line.trim()).filter(line -> !line.isEmpty()).forEach(rule -> {
+                int j = rule.indexOf(' ');
+                if (j != -1) {
+                    rule = rule.substring(0, j);
                 }
-            }
-        } catch (IOException ex) {
-            logger.error("Failed to load /smile/nlp/stemmer/Lancaster_rules.txt", ex);
+                rules.add(rule);
+            });
         }
 
         // Now assign the number of the first rule that starts with each letter
@@ -100,7 +96,11 @@ public class LancasterStemmer implements Stemmer {
      */
     public LancasterStemmer(boolean stripPrefix) {
         this.stripPrefix = stripPrefix;
-        readRules(LancasterStemmer.class.getResourceAsStream("/smile/nlp/stemmer/Lancaster_rules.txt"));
+        try {
+            readRules(LancasterStemmer.class.getResourceAsStream("/smile/nlp/stemmer/Lancaster_rules.txt"));
+        } catch (IOException ex) {
+            logger.error("Failed to load /smile/nlp/stemmer/Lancaster_rules.txt", ex);
+        }
     }
 
 
@@ -108,7 +108,7 @@ public class LancasterStemmer implements Stemmer {
      * Constructor with customized rules. By default, the stemmer will not strip prefix from words.
      * @param customizedRules an input stream to read customized rules.
      */
-    public LancasterStemmer(InputStream customizedRules) {
+    public LancasterStemmer(InputStream customizedRules) throws IOException {
         this(customizedRules, false);
     }
 
@@ -119,7 +119,7 @@ public class LancasterStemmer implements Stemmer {
      * @param stripPrefix true if the stemmer will strip prefix such as kilo,
      * micro, milli, intra, ultra, mega, nano, pico, pseudo.
      */
-    public LancasterStemmer(InputStream customizedRules, boolean stripPrefix) {
+    public LancasterStemmer(InputStream customizedRules, boolean stripPrefix) throws IOException {
         this.stripPrefix = stripPrefix;
         readRules(customizedRules);
     }
@@ -153,25 +153,25 @@ public class LancasterStemmer implements Stemmer {
 
         //integer varables
 
-        int pll = 0;		//position of last letter
-        int xl;				//counter for nuber of chars to be replaced and length of stemmed word if rule was aplied
-        int pfv;			//poition of first vowel
-        int prt;			//pointer into rule table
-        int ir;				//index of rule
-        int iw;				//index of word
+        int pll = 0; //position of last letter
+        int xl;  //counter for nuber of chars to be replaced and length of stemmed word if rule was aplied
+        int pfv; //poition of first vowel
+        int prt; //pointer into rule table
+        int ir;  //index of rule
+        int iw;  //index of word
 
         //char variables
 
-        char ll;			// last letter
+        char ll; // last letter
 
         //String variables eqiverlent of tenchar variables
 
-        String rule = "";		//varlable holding the current rule
-        String stem = "";  		// string holding the word as it is being stemmed this is returned as a stemmed word.
+        String rule = ""; //varlable holding the current rule
+        String stem = ""; // string holding the word as it is being stemmed this is returned as a stemmed word.
 
         //boolean varable
 
-        boolean intact = true; 		//intact if the word has not yet been stemmed to determin a requirement of some stemming rules
+        boolean intact = true; //intact if the word has not yet been stemmed to determin a requirement of some stemming rules
 
         //set stem = to word
         stem = cleanup(word.toLowerCase());
@@ -310,7 +310,7 @@ public class LancasterStemmer implements Stemmer {
                         prt = prt + 1;
                         // move to next rule in RULETABLE
                         if (prt >= rules.size()) {
-                            Continue = -1;                        	
+                            Continue = -1;
                         } else {
                             rule = rules.get(prt);
                             if (rule.charAt(0) != ll) {

@@ -1,25 +1,26 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.feature;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import smile.data.Attribute;
-import smile.math.Math;
+import smile.data.CategoricalEncoder;
+import smile.data.DataFrame;
+import smile.data.Tuple;
+import smile.math.MathEx;
 
 /**
  * Normalize samples individually to unit norm. Each sample (i.e. each row of
@@ -31,13 +32,13 @@ import smile.math.Math;
  *
  * @author Haifeng Li
  */
-public class Normalizer extends FeatureTransform {
-    private static final Logger logger = LoggerFactory.getLogger(Normalizer.class);
+public class Normalizer implements FeatureTransform {
+    private static final long serialVersionUID = 2L;
 
     /**
      * The types of data scaling.
      */
-    public static enum Norm {
+    public enum Norm {
         /**
          * L1 vector norm.
          */
@@ -53,19 +54,11 @@ public class Normalizer extends FeatureTransform {
     }
 
     /** The type of norm .*/
-    private Norm norm = Norm.L2;
+    private Norm norm;
 
     /** Default constructor with L2 norm. */
     public Normalizer() {
-
-    }
-
-    /**
-     * Constructor with L2 norm.
-     * @param copy  If false, try to avoid a copy and do inplace scaling instead.
-     */
-    public Normalizer(boolean copy) {
-        super(copy);
+        this(Norm.L2);
     }
 
     /**
@@ -76,44 +69,27 @@ public class Normalizer extends FeatureTransform {
         this.norm = norm;
     }
 
-    /**
-     * Constructor.
-     * @param norm The norm to use to normalize each non zero sample.
-     * @param copy  If false, try to avoid a copy and do inplace scaling instead.
-     */
-    public Normalizer(Norm norm, boolean copy) {
-        super(copy);
-        this.norm = norm;
-    }
-
-    @Override
-    public void learn(Attribute[] attributes, double[][] data) {
-        logger.info("Normalizer is stateless and learn() does nothing.");
-    }
-
     @Override
     public double[] transform(double[] x) {
         double scale;
 
         switch (norm) {
             case L1:
-                scale = Math.norm1(x);
+                scale = MathEx.norm1(x);
                 break;
             case L2:
-                scale = Math.norm2(x);
+                scale = MathEx.norm2(x);
                 break;
             case Inf:
-                scale = Math.normInf(x);
+                scale = MathEx.normInf(x);
                 break;
             default:
                 throw new IllegalStateException("Unknown type of norm: " + norm);
         }
 
-        double[] y = copy ? new double[x.length] : x;
-        if (Math.isZero(scale)) {
-            if (y != x) {
-                System.arraycopy(x, 0, y, 0, x.length);
-            }
+        double[] y = new double[x.length];
+        if (MathEx.isZero(scale)) {
+            System.arraycopy(x, 0, y, 0, x.length);
         } else {
             for (int i = 0; i < x.length; i++) {
                 y[i] = x[i] / scale;
@@ -124,7 +100,18 @@ public class Normalizer extends FeatureTransform {
     }
 
     @Override
+    public Tuple transform(Tuple x) {
+        double[] y = transform(x.toArray(false, CategoricalEncoder.ONE_HOT));
+        return Tuple.of(y, x.schema());
+    }
+
+    @Override
+    public DataFrame transform(DataFrame data) {
+        return DataFrame.of(data.stream().map(this::transform));
+    }
+
+    @Override
     public String toString() {
-        return "Normalizer()";
+        return String.format("Normalizer(%s)", norm);
     }
 }

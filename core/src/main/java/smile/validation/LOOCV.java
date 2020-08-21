@@ -1,20 +1,31 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.validation;
+
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import smile.classification.Classifier;
+import smile.classification.DataFrameClassifier;
+import smile.data.DataFrame;
+import smile.data.formula.Formula;
+import smile.math.MathEx;
+import smile.regression.DataFrameRegression;
+import smile.regression.Regression;
 
 /**
  * Leave-one-out cross validation. LOOCV uses a single observation
@@ -58,5 +69,79 @@ public class LOOCV {
                 }
             }
         }
+    }
+
+    /**
+     * Runs leave-one-out cross validation tests.
+     * @return the predictions.
+     */
+    public static <T> int[] classification(T[] x, int[] y, BiFunction<T[], int[], Classifier<T>> trainer) {
+        int n = x.length;
+        LOOCV cv = new LOOCV(n);
+        int[] prediction = new int[n];
+
+        for (int i = 0; i < n; i++) {
+            T[] trainx = MathEx.slice(x, cv.train[i]);
+            int[] trainy = MathEx.slice(y, cv.train[i]);
+
+            Classifier<T> model = trainer.apply(trainx, trainy);
+            prediction[cv.test[i]] = model.predict(x[cv.test[i]]);
+        }
+
+        return prediction;
+    }
+
+    /**
+     * Runs leave-one-out cross validation tests.
+     * @return the predictions.
+     */
+    public static int[] classification(Formula formula, DataFrame data, BiFunction<Formula, DataFrame, DataFrameClassifier> trainer) {
+        int n = data.size();
+        LOOCV cv = new LOOCV(n);
+        int[] prediction = new int[n];
+
+        for (int i = 0; i < n; i++) {
+            DataFrameClassifier model = trainer.apply(formula, data.of(cv.train[i]));
+            prediction[cv.test[i]] = model.predict(data.get(cv.test[i]));
+        }
+
+        return prediction;
+    }
+
+    /**
+     * Runs leave-one-out cross validation tests.
+     * @return the predictions.
+     */
+    public static <T> double[] regression(T[] x, double[] y, BiFunction<T[], double[], Regression<T>> trainer) {
+        int n = x.length;
+        LOOCV cv = new LOOCV(n);
+        double[] prediction = new double[n];
+
+        for (int i = 0; i < n; i++) {
+            T[] trainx = MathEx.slice(x, cv.train[i]);
+            double[] trainy = MathEx.slice(y, cv.train[i]);
+
+            Regression<T> model = trainer.apply(trainx, trainy);
+            prediction[cv.test[i]] = model.predict(x[cv.test[i]]);
+        }
+
+        return prediction;
+    }
+
+    /**
+     * Runs leave-one-out cross validation tests.
+     * @return the predictions.
+     */
+    public static double[] regression(Formula formula, DataFrame data, BiFunction<Formula, DataFrame, DataFrameRegression> trainer) {
+        int n = data.size();
+        LOOCV cv = new LOOCV(n);
+        double[] prediction = new double[n];
+
+        for (int i = 0; i < n; i++) {
+            DataFrameRegression model = trainer.apply(formula, data.of(cv.train[i]));
+            prediction[cv.test[i]] = model.predict(data.get(cv.test[i]));
+        }
+
+        return prediction;
     }
 }

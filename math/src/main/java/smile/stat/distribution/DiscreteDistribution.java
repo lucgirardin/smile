@@ -1,30 +1,50 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.stat.distribution;
 
+import smile.math.MathEx;
+
 /**
- * This is the base class of univariate discrete distributions. Basically,
- * this class adds common distribution methods that accept integer argument
- * beside float argument. A quantile function is provided based on bisection
- * searching. Likelihood and log likelihood functions are also implemented here.
+ * Univariate discrete distributions. Basically, this class adds common
+ * distribution methods that accept integer argument beside float argument.
+ * A quantile function is provided based on bisection searching.
+ * Likelihood and log likelihood functions are also implemented here.
  *
  * @author Haifeng Li
  */
 public abstract class DiscreteDistribution extends AbstractDistribution {
+    /**
+     * Generates an integer random numbers following this discrete distribution.
+     */
+    public int randi() {
+        return (int) rand();
+    }
+
+    /**
+     * Generates a set of integer random numbers following this discrete distribution.
+     */
+    public int[] randi(int n) {
+        int[] data = new int[n];
+        for (int i = 0; i < n; i++) {
+            data[i] = randi();
+        }
+        return data;
+    }
 
     /**
      * The probability mass function.
@@ -33,10 +53,11 @@ public abstract class DiscreteDistribution extends AbstractDistribution {
 
     @Override
     public double p(double x) {
-        if (x - Math.floor(x) != 0)
-            return 0.0;
-        else
-            return p((int)x);
+        if (!MathEx.isInt(x)) {
+            throw new IllegalArgumentException("x is not an integer");
+        }
+
+        return p((int)x);
     }
 
     /**
@@ -46,10 +67,11 @@ public abstract class DiscreteDistribution extends AbstractDistribution {
     
     @Override
     public double logp(double x) {
-        if (x - Math.floor(x) != 0)
-            return Double.NaN;
-        else
-            return logp((int)x);
+        if (!MathEx.isInt(x)) {
+            throw new IllegalArgumentException("x is not an integer");
+        }
+
+        return logp((int)x);
     }
     
     /**
@@ -72,9 +94,10 @@ public abstract class DiscreteDistribution extends AbstractDistribution {
     }
 
     /**
-     * Invertion of cdf by bisection numeric root finding of "cdf(x) = p"
-     * for discrete distribution.* Returns integer n such that
-     * P(<n) &le; p &le; P(<n+1).
+     * Invertion of cdf by bisection numeric root finding of
+     * <code>cdf(x) = p</code> for discrete distribution.
+     * @return an integer <code>n</code> such that
+     *         <code>P(&lt;n) &le; p &le; P(&lt;n+1)</code>.
      */
     protected double quantile(double p, int xmin, int xmax) {
         while (xmax - xmin > 1) {

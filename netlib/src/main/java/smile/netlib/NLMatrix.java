@@ -1,18 +1,19 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.netlib;
 
@@ -20,12 +21,9 @@ import smile.math.matrix.DenseMatrix;
 import smile.math.matrix.JMatrix;
 import smile.math.matrix.SVD;
 import smile.math.matrix.EVD;
-import smile.sort.QuickSort;
 import com.github.fommil.netlib.BLAS;
 import com.github.fommil.netlib.LAPACK;
 import org.netlib.util.intW;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Column-major matrix that employs netlib for matrix-vector and matrix-matrix
@@ -35,8 +33,17 @@ import org.slf4j.LoggerFactory;
  */
 public class NLMatrix extends JMatrix {
     private static final long serialVersionUID = 1L;
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(NLMatrix.class);
 
-    private static final Logger logger = LoggerFactory.getLogger(NLMatrix.class);
+    static {
+        if (System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("windows")) {
+            try {
+                System.loadLibrary("mkl_rt");
+            } catch (Exception ex) {
+                logger.warn("mkl_rt.dll is not available: {}", ex);
+            }
+        }
+    }
 
     static String NoTranspose = "N";
     static String Transpose   = "T";
@@ -91,7 +98,7 @@ public class NLMatrix extends JMatrix {
     }
 
     @Override
-    public NLMatrix copy() {
+    public NLMatrix clone() {
         return new NLMatrix(nrows(), ncols(), data().clone());
     }
 
@@ -187,6 +194,22 @@ public class NLMatrix extends JMatrix {
         }
 
         throw new IllegalArgumentException("NLMatrix.atbmm() parameter must be JMatrix");
+    }
+
+    @Override
+    public NLMatrix atbtmm(DenseMatrix B) {
+        if (B instanceof JMatrix) {
+            int m = ncols();
+            int n = B.nrows();
+            int k = nrows();
+            NLMatrix C = new NLMatrix(m, n);
+            BLAS.getInstance().dgemm(Transpose, Transpose,
+                    m, n, k, 1.0, data(), k, B.data(),
+                    n, 0.0, C.data(), m);
+            return C;
+        }
+
+        throw new IllegalArgumentException("NLMatrix.atbtmm() parameter must be JMatrix");
     }
 
     @Override

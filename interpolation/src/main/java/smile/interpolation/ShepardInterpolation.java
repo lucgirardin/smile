@@ -1,21 +1,23 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.interpolation;
 
-import smile.math.Math;
+import smile.math.MathEx;
 
 /**
  * Shepard interpolation is a special case of normalized radial basis function
@@ -24,8 +26,8 @@ import smile.math.Math;
  * the respective function values y<sub>i</sub>. So we need not solve linear
  * equations and thus it works for very large N.
  * <p>
- * An example of such &phi; is &phi;(r) = r<sup>-p</sup> with (typically)
- * 1 &lt; p &le; 3.
+ * An example of such &phi; is <code>&phi;(r) = r<sup>-p</sup></code> with
+ * (typically) <code>1 &lt; p &le; 3</code>.
  * <p>
  * Shepard interpolation is rarely as accurate as the well-tuned application of
  * other radial basis functions. However, it is simple, fast, and often just the
@@ -70,7 +72,7 @@ public class ShepardInterpolation {
 
         double weight = 0.0, sum = 0.0;
         for (int i = 0; i < this.x.length; i++) {
-            double r = Math.distance(x, this.x[i]);
+            double r = MathEx.distance(x, this.x[i]);
             if (r == 0.0) {
                 return y[i];
             }
@@ -80,5 +82,10 @@ public class ShepardInterpolation {
         }
 
         return sum / weight;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Shepard Interpolation(p = %.4f)", -p);
     }
 }

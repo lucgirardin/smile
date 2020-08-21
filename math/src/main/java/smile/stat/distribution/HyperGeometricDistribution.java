@@ -1,22 +1,26 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.stat.distribution;
 
-import smile.math.Math;
+import smile.math.MathEx;
+
+import static smile.math.MathEx.lchoose;
+import static smile.math.MathEx.lfactorial;
 
 /**
  * The hypergeometric distribution is a discrete probability distribution that
@@ -29,6 +33,7 @@ import smile.math.Math;
  * describes the distribution of the number of white balls drawn from the urn.
  * A random variable X follows the hypergeometric distribution with parameters
  * N, m and n if the probability is given by
+ * <p>
  * <pre>
  *              <sub>m</sub>C<sub>k</sub> <sub>(N-m)</sub>C<sub>(n-k)</sub>
  * P(X = k) = ----------------
@@ -39,11 +44,15 @@ import smile.math.Math;
  * @author Haifeng Li
  */
 public class HyperGeometricDistribution extends DiscreteDistribution {
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
-    private int N;
-    private int m;
-    private int n;
+    /** The number of total samples. */
+    public final int N;
+    /** The number of defects. */
+    public final int m;
+    /** The number of draws. */
+    public final int n;
+
     private RandomNumberGenerator rng;
 
     /**
@@ -71,7 +80,7 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
     }
 
     @Override
-    public int npara() {
+    public int length() {
         return 3;
     }
 
@@ -81,14 +90,9 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
     }
 
     @Override
-    public double var() {
+    public double variance() {
         double r = (double) m / N;
         return n * (N - n) * r * (1 - r) / (N - 1);
-    }
-
-    @Override
-    public double sd() {
-        return Math.sqrt(var());
     }
 
     @Override
@@ -115,7 +119,7 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
         if (k < Math.max(0, m + n - N) || k > Math.min(m, n)) {
             return Double.NEGATIVE_INFINITY;
         } else {
-            return Math.logChoose(m, k) + Math.logChoose(N - m, n - k) - Math.logChoose(N, n);
+            return lchoose(m, k) + lchoose(N - m, n - k) - lchoose(N, n);
         }
     }
 
@@ -178,33 +182,25 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
      */
     @Override
     public double rand() {
-        int mm = m;
-        int nn = n;
-
-        if (mm > N / 2) {
-            // invert mm
-            mm = N - mm;
-        }
-
-        if (nn > N / 2) {
-            // invert nn
-            nn = N - nn;
-        }
-
-        if (nn > mm) {
-            // swap nn and mm
-            int swap = nn;
-            nn = mm;
-            mm = swap;
-        }
-
         if (rng == null) {
+            int mm = m;
+            int nn = n;
+            if (mm > N / 2) {
+                // invert mm
+                mm = N - mm;
+            }
+
+            if (nn > N / 2) {
+                // invert nn
+                nn = N - nn;
+            }
+
             if ((double) nn * mm >= 20 * N) {
                 // use ratio-of-uniforms method
-                rng = new Patchwork(N, mm, nn);
+                rng = new Patchwork(N, m, n);
             } else {
                 // inversion method, using chop-down search from mode
-                rng = new Inversion(N, mm, nn);
+                rng = new Inversion(N, m, n);
             }
         }
 
@@ -217,10 +213,6 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
         protected int addd;
 
         RandomNumberGenerator(int N, int m, int n) {
-            this.N = N;
-            this.m = m;
-            this.n = n;
-
             // transformations
             fak = 1; // used for undoing transformations
             addd = 0;
@@ -240,11 +232,15 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
             }
 
             if (n > m) {
-                // swap nn and mm
+                // swap n and m
                 int swap = n;
                 n = m;
                 m = swap;
             }
+
+            this.N = N;
+            this.m = m;
+            this.n = n;
         }
 
         public int rand() {
@@ -269,8 +265,8 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
         /**
          * Initialize random number generator.
          */
-        Patchwork(int N, int m, int n) {
-            super(N, m, n);
+        Patchwork(int N, int mm, int nn) {
+            super(N, mm, nn);
 
             double Mp, np, p, modef, U;                 // (X, Y) <-> (V, W)
 
@@ -309,7 +305,7 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
 
             // reciprocal values of the scale parameters of expon. tail envelopes
             ll = Math.log(r1);                                     // expon. tail left
-            lr = -Math.log(r5);                                     // expon. tail right
+            lr = -Math.log(r5);                                    // expon. tail right
 
             // hypergeom. constant, necessary for computing function values f(k)
             cPm = lnpk(mode, L, m, n);
@@ -322,9 +318,9 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
 
             // area of the two centre and the two exponential tail regions
             // area of the two immediate acceptance regions between k2, k4
-            p1 = f2 * (dl + 1.);                               // immed. left
+            p1 = f2 * (dl + 1.);                      // immed. left
             p2 = f2 * dl + p1;                        // centre left
-            p3 = f4 * (dr + 1.) + p2;                        // immed. right
+            p3 = f4 * (dr + 1.) + p2;                 // immed. right
             p4 = f4 * dr + p3;                        // centre right
             p5 = f1 / ll + p4;                        // expon. tail left
             p6 = f5 / lr + p5;                        // expon. tail right
@@ -359,7 +355,7 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
             while (true) {
                 // generate uniform number U -- U(0, p6)
                 // case distinction corresponding to U
-                if ((U = Math.random() * p6) < p2) {                  // centre left
+                if ((U = MathEx.random() * p6) < p2) {                  // centre left
 
                     // immediate acceptance region R2 = [k2, mode) *[0, f2),  X = k2, ... mode -1
                     if ((W = U - p1) < 0.) {
@@ -372,21 +368,21 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
 
                     // computation of candidate X < k2, and its reflected counterpart V > k2
                     // either squeeze-acceptance of X or acceptance-rejection of V
-                    Dk = (int) (dl * Math.random()) + 1;
-                    if (Y <= f2 - Dk * (f2 - f2 / r2)) {         // quick accept of
-                        return (k2 - Dk);
-                    }                              // X = k2 - Dk
+                    Dk = (int) (dl * MathEx.random()) + 1;
+                    if (Y <= f2 - Dk * (f2 - f2 / r2)) {             // quick accept of
+                        return (k2 - Dk);                            // X = k2 - Dk
+                    }
 
-                    if ((W = f2 + f2 - Y) < 1.) {                  // quick reject of V
+                    if ((W = f2 + f2 - Y) < 1.) {                    // quick reject of V
                         V = k2 + Dk;
                         if (W <= f2 + Dk * (1. - f2) / (dl + 1.)) {  // quick accept of V
                             return (V);
                         }
                         if (Math.log(W) <= cPm - lnpk(V, L, m, n)) {
-                            return (V);                                   // final accept of V
+                            return (V);                              // final accept of V
                         }
                     }
-                    X = k2 - Dk;                                    // go to final accept/reject
+                    X = k2 - Dk;                                     // go to final accept/reject
                 } else if (U < p4) {                                 // centre right
 
                     // immediate acceptance region R3 = [mode, k4+1)*[0, f4), X = mode, ... k4
@@ -401,23 +397,23 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
 
                     // computation of candidate X > k4, and its reflected counterpart V < k4
                     // either squeeze-acceptance of X or acceptance-rejection of V
-                    Dk = (int) (dr * Math.random()) + 1;
-                    if (Y <= f4 - Dk * (f4 - f4 * r4)) {         // quick accept of
-                        return (k4 + Dk);                              // X = k4 + Dk
+                    Dk = (int) (dr * MathEx.random()) + 1;
+                    if (Y <= f4 - Dk * (f4 - f4 * r4)) {             // quick accept of
+                        return (k4 + Dk);                            // X = k4 + Dk
                     }
-                    if ((W = f4 + f4 - Y) < 1.) {                  // quick reject of V
+                    if ((W = f4 + f4 - Y) < 1.) {                    // quick reject of V
                         V = k4 - Dk;
                         if (W <= f4 + Dk * (1. - f4) / dr) {         // quick accept of
-                            return V;                                    // V = k4 - Dk
+                            return V;                                // V = k4 - Dk
                         }
 
                         if (Math.log(W) <= cPm - lnpk(V, L, m, n)) {
-                            return (V);                                   // final accept of V
+                            return (V);                              // final accept of V
                         }
                     }
-                    X = k4 + Dk;                                    // go to final accept/reject
+                    X = k4 + Dk;                                     // go to final accept/reject
                 } else {
-                    Y = Math.random();
+                    Y = MathEx.random();
                     if (U < p5) {                                    // expon. tail left
                         Dk = (int) (1. - Math.log(Y) / ll);
                         if ((X = k1 - Dk) < 0) {
@@ -425,16 +421,16 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
                         }
                         Y *= (U - p4) * ll;                          // Y -- U(0, h(x))
                         if (Y <= f1 - Dk * (f1 - f1 / r1)) {
-                            return X;                                   // quick accept of X
+                            return X;                                // quick accept of X
                         }
-                    } else {                                             // expon. tail right
+                    } else {                                         // expon. tail right
                         Dk = (int) (1. - Math.log(Y) / lr);
                         if ((X = k5 + Dk) > n) {
                             continue;             // k5 + 1 <= X <= nn
                         }
                         Y *= (U - p5) * lr;                          // Y -- U(0, h(x))
                         if (Y <= f5 - Dk * (f5 - f5 * r5)) {
-                            return X;                                  // quick accept of X
+                            return X;                                // quick accept of X
                         }
                     }
                 }
@@ -453,28 +449,28 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
          *  subfunction used by random number generator.
          */
         private double lnpk(int k, int L, int m, int n) {
-            return Math.logFactorial(k) + Math.logFactorial(m - k) + Math.logFactorial(n - k) + Math.logFactorial(L + k);
+            return lfactorial(k) + lfactorial(m - k) + lfactorial(n - k) + lfactorial(L + k);
         }
     }
 
     class Inversion extends RandomNumberGenerator {
 
-        private int mode,  mp;                              // Mode, mode+1
-        private int bound;                                      // Safety upper bound
-        private double fm;                                      // Value at mode
+        private int mode,  mp;  // Mode, mode+1
+        private int bound;      // Safety upper bound
+        private double fm;      // Value at mode
 
         /**
          * Initialize random number generator.
          */
-        Inversion(int N, int m, int n) {
-            super(N, m, n);
+        Inversion(int N, int mm, int nn) {
+            super(N, mm, nn);
 
             int L = N - m - n;        // Parameter
             double Mp = m + 1;
             double np = n + 1;
 
             double p = Mp / (N + 2.);
-            double modef = np * p;                 // mode, real
+            double modef = np * p;         // mode, real
             mode = (int) modef;            // mode, integer
             if (mode == modef && p == 0.5) {
                 mp = mode--;
@@ -484,7 +480,15 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
 
             // mode probability, using log factorial function
             // (may read directly from fac_table if N < FAK_LEN)
-            fm = Math.exp(Math.logFactorial(N - m) - Math.logFactorial(L + mode) - Math.logFactorial(n - mode) + Math.logFactorial(m) - Math.logFactorial(m - mode) - Math.logFactorial(mode) - Math.logFactorial(N) + Math.logFactorial(N - n) + Math.logFactorial(n));
+            fm = Math.exp(lfactorial(N - m)
+                    - lfactorial(L + mode)
+                    - lfactorial(n - mode)
+                    + lfactorial(m)
+                    - lfactorial(m - mode)
+                    - lfactorial(mode)
+                    - lfactorial(N)
+                    + lfactorial(N - n)
+                    + lfactorial(n));
 
             // safety bound - guarantees at least 17 significant decimal digits
             // bound = min(nn, (int)(modef + k*c'))
@@ -509,19 +513,19 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
             // Sampling
             int I;                    // Loop counter
             int L = N - m - n;        // Parameter
-            double Mp, np;               // mm + 1, nn + 1
-            double U;                    // uniform random
-            double c, d;                 // factors in iteration
-            double divisor;              // divisor, eliminated by scaling
-            double k1, k2;               // float version of loop counter
-            double L1 = L;               // float version of L
+            double Mp, np;            // mm + 1, nn + 1
+            double U;                 // uniform random
+            double c, d;              // factors in iteration
+            double divisor;           // divisor, eliminated by scaling
+            double k1, k2;            // float version of loop counter
+            double L1 = L;            // float version of L
 
             Mp = (double) (m + 1);
             np = (double) (n + 1);
 
             // loop until accepted
             while (true) {
-                U = Math.random();                    // uniform random number to be converted
+                U = MathEx.random();  // uniform random number to be converted
 
                 // start chop-down search at mode
                 if ((U -= fm) <= 0.) {
@@ -553,8 +557,8 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
                         return (mode + I);  // = k2
                     }         // Values of nn > 75 or N > 680 may give overflow if you leave out this..
 
-                // overflow protection
-                // if (U > 1.E100) {U *= 1.E-100; c *= 1.E-100; d *= 1.E-100;}
+                    // overflow protection
+                    if (U > 1.E100) {U *= 1.E-100; c *= 1.E-100; d *= 1.E-100;}
                 }
 
                 // Upward search from k2 = 2*mode + 1 to bound
@@ -566,8 +570,8 @@ public class HyperGeometricDistribution extends DiscreteDistribution {
                         return (I);
                     }
 
-                // more overflow protection
-                // if (U > 1.E100) {U *= 1.E-100; d *= 1.E-100;}
+                    // more overflow protection
+                    if (U > 1.E100) {U *= 1.E-100; d *= 1.E-100;}
                 }
             }
         }

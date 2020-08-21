@@ -1,32 +1,42 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.classification;
 
-import smile.data.NominalAttribute;
-import smile.data.AttributeDataset;
-import smile.data.parser.DelimitedTextParser;
-import smile.data.parser.ArffParser;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import smile.math.Math;
+import smile.data.BreastCancer;
+import smile.data.Iris;
+import smile.data.PenDigits;
+import smile.data.USPS;
+import smile.math.MathEx;
+import smile.util.Paths;
+import smile.validation.CrossValidation;
+import smile.validation.Error;
 import smile.validation.LOOCV;
+import smile.validation.Validation;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.util.Arrays;
+
 import static org.junit.Assert.*;
 
 /**
@@ -54,68 +64,79 @@ public class FLDTest {
     public void tearDown() {
     }
 
-    /**
-     * Test of predict method, of class FDA.
-     */
     @Test
-    public void testPredict() {
-        System.out.println("IRIS");
-        ArffParser arffParser = new ArffParser();
-        arffParser.setResponseIndex(4);
-        try {
-            AttributeDataset iris = arffParser.parse(smile.data.parser.IOUtils.getTestDataFile("weka/iris.arff"));
-            double[][] x = iris.toArray(new double[iris.size()][]);
-            int[] y = iris.toArray(new int[iris.size()]);
+    public void testIris() {
+        System.out.println("Iris");
 
-            int n = x.length;
-            LOOCV loocv = new LOOCV(n);
-            int error = 0;
-            for (int i = 0; i < n; i++) {
-                double[][] trainx = Math.slice(x, loocv.train[i]);
-                int[] trainy = Math.slice(y, loocv.train[i]);
-                FLD fisher = new FLD(trainx, trainy);
-
-                if (y[loocv.test[i]] != fisher.predict(x[loocv.test[i]]))
-                    error++;
-            }
-
-            System.out.println("FLD error = " + error);
-            assertEquals(5, error);
-        } catch (Exception ex) {
-            System.err.println(ex);
-        }
+        int[] prediction = LOOCV.classification(Iris.x, Iris.y, (x, y) -> FLD.fit(x, y));
+        int error = Error.of(Iris.y, prediction);
+        System.out.println("Error = " + error);
+        assertEquals(3, error);
     }
 
-    /**
-     * Test of learn method, of class FDA.
-     */
     @Test
-    public void testUSPS() {
+    public void testPenDigits() {
+        System.out.println("Pen Digits");
+
+        MathEx.setSeed(19650218); // to get repeatable results.
+        int[] prediction = CrossValidation.classification(10, PenDigits.x, PenDigits.y, (x, y) -> FLD.fit(x, y));
+        int error = Error.of(PenDigits.y, prediction);
+
+        System.out.println("Error = " + error);
+        assertEquals(921, error);
+    }
+
+    @Test
+    public void testBreastCancer() {
+        System.out.println("Breast Cancer");
+
+        MathEx.setSeed(19650218); // to get repeatable results.
+        int[] prediction = CrossValidation.classification(10, BreastCancer.x, BreastCancer.y, (x, y) -> FLD.fit(x, y));
+        int error = Error.of(BreastCancer.y, prediction);
+
+        System.out.println("Error = " + error);
+        assertEquals(20, error);
+    }
+
+    @Test(expected = Test.None.class)
+    public void testUSPS() throws Exception {
         System.out.println("USPS");
-        DelimitedTextParser parser = new DelimitedTextParser();
-        parser.setResponseIndex(new NominalAttribute("class"), 0);
-        try {
-            AttributeDataset train = parser.parse("USPS Train", smile.data.parser.IOUtils.getTestDataFile("usps/zip.train"));
-            AttributeDataset test = parser.parse("USPS Test", smile.data.parser.IOUtils.getTestDataFile("usps/zip.test"));
 
-            double[][] x = train.toArray(new double[train.size()][]);
-            int[] y = train.toArray(new int[train.size()]);
-            double[][] testx = test.toArray(new double[test.size()][]);
-            int[] testy = test.toArray(new int[test.size()]);
-            
-            FLD fisher = new FLD(x, y);
-                        
-            int error = 0;
-            for (int i = 0; i < testx.length; i++) {
-                if (fisher.predict(testx[i]) != testy[i]) {
-                    error++;
-                }
+        FLD model = FLD.fit(USPS.x, USPS.y);
+
+        int error = Error.of(USPS.testy, Validation.test(model, USPS.testx));
+        System.out.println("Error = " + error);
+        assertEquals(262, error);
+
+        java.nio.file.Path temp = smile.data.Serialize.write(model);
+        System.out.println(temp);
+        model = (FLD) smile.data.Serialize.read(temp);
+
+        Validation.test(model, USPS.testx);
+        error = Error.of(USPS.testy, Validation.test(model, USPS.testx));
+        System.out.println("Error = " + error);
+        assertEquals(262, error);
+    }
+
+    @Test(expected = Test.None.class)
+    public void testColon() throws IOException {
+        System.out.println("Colon");
+
+        BufferedReader reader = Paths.getTestDataReader("microarray/colon.txt");
+        int[] y = Arrays.stream(reader.readLine().split(" ")).mapToInt(s -> Integer.valueOf(s) > 0 ? 1 : 0).toArray();
+
+        double[][] x = new double[62][2000];
+        for (int i = 0; i < 2000; i++) {
+            String[] tokens = reader.readLine().split(" ");
+            for (int j = 0; j < 62; j++) {
+                x[j][i] = Double.valueOf(tokens[j]);
             }
-
-            System.out.format("USPS error rate = %.2f%%%n", 100.0 * error / testx.length);
-            assertEquals(561, error);
-        } catch (Exception ex) {
-            System.err.println(ex);
         }
+
+        MathEx.setSeed(19650218); // to get repeatable results.
+        int[] prediction = CrossValidation.classification(5, x, y, (xi, yi) -> FLD.fit(xi, yi));
+        int error = Error.of(y, prediction);
+        System.out.println("Error = " + error);
+        assertEquals(9, error);
     }
 }

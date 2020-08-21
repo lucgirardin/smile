@@ -1,18 +1,20 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.interpolation;
 
 /**
@@ -42,7 +44,7 @@ public abstract class AbstractInterpolation implements Interpolation {
      * Constructor. Setup for interpolation on a table of x and y of length m.
      * The value in x must be monotonic, either increasing or decreasing.
      */
-    AbstractInterpolation(double[] x, double[] y) {
+    public AbstractInterpolation(double[] x, double[] y) {
         if (x.length != y.length) {
             throw new IllegalArgumentException("x and y have different length");
         }
@@ -73,7 +75,7 @@ public abstract class AbstractInterpolation implements Interpolation {
      * returned value is not less than 0, nor greater than n-1, where n is the
      * length of xx.
      */
-    int search(double x) {
+    public int search(double x) {
         return cor ? hunt(x) : locate(x);
     }
 
@@ -166,6 +168,9 @@ public abstract class AbstractInterpolation implements Interpolation {
 
     /**
      * Subclasses provide this as the actual interpolation method.
+     * @param jlo the value jlo is such that x is (insofar as possible)
+     *        centered in the subrange xx[j..j+m-1], where xx is the stored data.
+     * @param x interpolate at this value
      */
-    abstract double rawinterp(int jlo, double x);
+    public abstract double rawinterp(int jlo, double x);
 }

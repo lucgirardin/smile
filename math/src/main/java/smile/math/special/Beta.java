@@ -1,35 +1,38 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.math.special;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import smile.math.Math;
+import static java.lang.Math.*;
+import static smile.math.special.Gamma.lgamma;
 
 /**
  * The beta function, also called the Euler integral of the first kind.
  * <p>
- * B(x, y) = <i><big>&#8747;</big><sub><small>0</small></sub><sup><small>1</small></sup> t<sup>x-1</sup> (1-t)<sup>y-1</sup>dt</i>
- * <p>
- * for x, y &gt; 0 and the integration is over [0,1].The beta function is symmetric, i.e. B(x,y) = B(y,x).
+ * <pre>
+ *     B(x, y) = <i><big>&#8747;</big><sub><small>0</small></sub><sup><small>1</small></sup> t<sup>x-1</sup> (1-t)<sup>y-1</sup>dt</i>
+ * </pre>
+ * for <code>x, y &gt; 0</code> and the integration is over [0, 1].
+ * The beta function is symmetric, i.e. <code>B(x, y) = B(y, x)</code>.
  *
  * @author Haifeng Li
  */
 public class Beta {
-    private static final Logger logger = LoggerFactory.getLogger(Beta.class);
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Beta.class);
 
     /** Utility classes should not have public constructors. */
     private Beta() {
@@ -46,7 +49,7 @@ public class Beta {
      * The beta function is symmetric, i.e. B(x,y)==B(y,x).
      */
     public static double beta(double x, double y) {
-        return Math.exp(Gamma.lgamma(x) + Gamma.lgamma(y) - Gamma.lgamma(x + y));
+        return exp(lgamma(x) + lgamma(y) - lgamma(x + y));
     }
 
     /**
@@ -54,6 +57,19 @@ public class Beta {
      * Continued Fraction approximation (see Numerical recipies for details)
      */
     public static double regularizedIncompleteBetaFunction(double alpha, double beta, double x) {
+        // This function is often used to calculate p-value of model fitting.
+        // Due to floating error, the model may provide a x that could be slightly
+        // greater than 1 or less than 0. We allow tiny slack here to avoid brute exception.
+        final double EPS = 1E-8;
+
+        if (x < 0.0 && abs(x) < EPS) {
+            return 0.0;
+        }
+
+        if (x > 1.0 && abs(x - 1.0) < EPS) {
+            return 1.0;
+        }
+
         if (x < 0.0 || x > 1.0) {
             throw new IllegalArgumentException("Invalid x: " + x);
         }
@@ -66,7 +82,7 @@ public class Beta {
                 ibeta = 1.0;
             } else {
                 // Term before continued fraction
-                ibeta = Math.exp(Gamma.lgamma(alpha + beta) - Gamma.lgamma(alpha) - Gamma.lgamma(beta) + alpha * Math.log(x) + beta * Math.log(1.0D - x));
+                ibeta = exp(lgamma(alpha + beta) - lgamma(alpha) - lgamma(beta) + alpha * log(x) + beta * log(1.0D - x));
                 // Continued fraction
                 if (x < (alpha + 1.0) / (alpha + beta + 2.0)) {
                     ibeta = ibeta * incompleteFractionSummation(alpha, beta, x) / alpha;
@@ -92,7 +108,7 @@ public class Beta {
         double aminus1 = alpha - 1.0;
         double c = 1.0;
         double d = 1.0 - aplusb * x / aplus1;
-        if (Math.abs(d) < FPMIN) {
+        if (abs(d) < FPMIN) {
             d = FPMIN;
         }
         d = 1.0 / d;
@@ -105,29 +121,29 @@ public class Beta {
             i2 = 2 * i;
             aa = i * (beta - i) * x / ((aminus1 + i2) * (alpha + i2));
             d = 1.0 + aa * d;
-            if (Math.abs(d) < FPMIN) {
+            if (abs(d) < FPMIN) {
                 d = FPMIN;
             }
             c = 1.0 + aa / c;
-            if (Math.abs(c) < FPMIN) {
+            if (abs(c) < FPMIN) {
                 c = FPMIN;
             }
             d = 1.0 / d;
             h *= d * c;
             aa = -(alpha + i) * (aplusb + i) * x / ((alpha + i2) * (aplus1 + i2));
             d = 1.0 + aa * d;
-            if (Math.abs(d) < FPMIN) {
+            if (abs(d) < FPMIN) {
                 d = FPMIN;
             }
             c = 1.0 + aa / c;
-            if (Math.abs(c) < FPMIN) {
+            if (abs(c) < FPMIN) {
                 c = FPMIN;
             }
             d = 1.0 / d;
             del = d * c;
             h *= del;
             i++;
-            if (Math.abs(del - 1.0) < EPS) {
+            if (abs(del - 1.0) < EPS) {
                 test = false;
             }
             if (i > MAXITER) {
@@ -158,43 +174,43 @@ public class Beta {
 
         if (alpha >= 1. && beta >= 1.) {
             pp = (p < 0.5) ? p : 1. - p;
-            t = Math.sqrt(-2. * Math.log(pp));
+            t = sqrt(-2. * log(pp));
             x = (2.30753 + t * 0.27061) / (1. + t * (0.99229 + t * 0.04481)) - t;
             if (p < 0.5) {
                 x = -x;
             }
             al = (x * x - 3.) / 6.;
             h = 2. / (1. / (2. * alpha - 1.) + 1. / (2. * beta - 1.));
-            w = (x * Math.sqrt(al + h) / h) - (1. / (2. * beta - 1) - 1. / (2. * alpha - 1.)) * (al + 5. / 6. - 2. / (3. * h));
-            x = alpha / (alpha + beta * Math.exp(2. * w));
+            w = (x * sqrt(al + h) / h) - (1. / (2. * beta - 1) - 1. / (2. * alpha - 1.)) * (al + 5. / 6. - 2. / (3. * h));
+            x = alpha / (alpha + beta * exp(2. * w));
         } else {
-            double lna = Math.log(alpha / (alpha + beta));
-            double lnb = Math.log(beta / (alpha + beta));
-            t = Math.exp(alpha * lna) / alpha;
-            u = Math.exp(beta * lnb) / beta;
+            double lna = log(alpha / (alpha + beta));
+            double lnb = log(beta / (alpha + beta));
+            t = exp(alpha * lna) / alpha;
+            u = exp(beta * lnb) / beta;
             w = t + u;
             if (p < t / w) {
-                x = Math.pow(alpha * w * p, 1. / alpha);
+                x = pow(alpha * w * p, 1. / alpha);
             } else {
-                x = 1. - Math.pow(beta * w * (1. - p), 1. / beta);
+                x = 1. - pow(beta * w * (1. - p), 1. / beta);
             }
         }
-        afac = -Gamma.lgamma(alpha) - Gamma.lgamma(beta) + Gamma.lgamma(alpha + beta);
+        afac = -lgamma(alpha) - lgamma(beta) + lgamma(alpha + beta);
         for (int j = 0; j < 10; j++) {
             if (x == 0. || x == 1.) {
                 return x;
             }
             err = regularizedIncompleteBetaFunction(alpha, beta, x) - p;
-            t = Math.exp(a1 * Math.log(x) + b1 * Math.log(1. - x) + afac);
+            t = exp(a1 * log(x) + b1 * log(1. - x) + afac);
             u = err / t;
-            x -= (t = u / (1. - 0.5 * Math.min(1., u * (a1 / x - b1 / (1. - x)))));
+            x -= (t = u / (1. - 0.5 * min(1., u * (a1 / x - b1 / (1. - x)))));
             if (x <= 0.) {
                 x = 0.5 * (x + t);
             }
             if (x >= 1.) {
                 x = 0.5 * (x + t + 1.);
             }
-            if (Math.abs(t) < EPS * x && j > 0) {
+            if (abs(t) < EPS * x && j > 0) {
                 break;
             }
         }

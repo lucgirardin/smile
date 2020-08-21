@@ -1,22 +1,24 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.regression;
 
 import java.io.Serializable;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Regression analysis includes any techniques for modeling and analyzing
@@ -28,10 +30,10 @@ import java.io.Serializable;
  * 
  * @author Haifeng Li
  */
-public interface Regression<T> extends Serializable {
+public interface Regression<T> extends ToDoubleFunction<T>, Serializable {
     /**
      * Predicts the dependent variable of an instance.
-     * @param x the instance.
+     * @param x an instance.
      * @return the predicted value of dependent variable.
      */
     double predict(T x);
@@ -43,10 +45,16 @@ public interface Regression<T> extends Serializable {
      * @return the predicted values.
      */
     default double[] predict(T[] x) {
-        double[] y = new double[x.length];
-        for (int i = 0; i < y.length; i++) {
+        int n = x.length;
+        double[] y = new double[n];
+        for (int i = 0; i < n; i++) {
             y[i] = predict(x[i]);
         }
         return y;
+    }
+
+    @Override
+    default double applyAsDouble(T x) {
+        return predict(x);
     }
 }

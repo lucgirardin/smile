@@ -1,22 +1,24 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.math.distance;
 
-import smile.math.Math;
+import smile.math.MathEx;
+import smile.util.IntArray2D;
 
 /**
  * The Edit distance between two strings is a metric for measuring the amount
@@ -44,7 +46,7 @@ public class EditDistance implements Metric<String> {
     /**
      * Weight matrix for weighted Levenshtein distance.
      */
-    private double[][] weight;
+    private IntArray2D weight;
 
     /**
      * Radius of Sakoe-Chiba band
@@ -54,44 +56,42 @@ public class EditDistance implements Metric<String> {
     /**
      * Calculate Damerau or basic Levenshitein distance.
      */
-    private boolean damerauDistance = false;
+    private boolean damerau = false;
 
     /**
      * Cost matrix. Because Java automatically initialize arrays, it
-     * is very time consuming to declare this cost matrix every time
-     * before calculate edit distance. Therefore, I create this
-     * cost matrix here. Note that methods using this cost matrix
-     * is not multi-thread safe.
+     * takes O(mn) to declare this cost matrix every time before
+     * calculate edit distance. But the whole point of Berghel and Roach
+     * algorithm is to calculate fewer cells than O(mn). Therefore,
+     * we create this cost matrix here. Therefore, the methods using
+     * this cost matrix is not multi-thread safe.
      */
-    private int[][] FKP;
+    private IntArray2D FKP;
 
     /**
-     * The object to calculate FKP array.
+     * The lambda to calculate FKP array.
      */
     private BRF brf;
 
+
     /**
-     * Constructor. Weighted Levenshtein distance without path
-     * constraints. Only insertion, deletion, and substitution operations are
-     * supported.
+     * Constructor. Multi-thread safe Levenshtein distance.
      */
-    public EditDistance(double[][] weight) {
-        this.weight = weight;
+    public EditDistance() {
+        this(false);
     }
 
     /**
-     * Constructor. Weighted Levenshtein distance with
-     * Sakoe-Chiba band, which improve computational cost. Only
-     * insertion, deletion, and substitution operations are supported.
-     * @param radius the window width of Sakoe-Chiba band in terms of percentage of sequence length.
+     * Constructor. Multi-thread safe Damerau-Levenshtein distance.
+     * @param damerau if true, calculate Damerau-Levenshtein distance
+     *                instead of plain Levenshtein distance.
      */
-    public EditDistance(double[][] weight, double radius) {
-        this.weight = weight;
-        this.r = radius;
+    public EditDistance(boolean damerau) {
+        this.damerau = damerau;
     }
 
     /**
-     * Constructor. Unit cost edit distance.
+     * Constructor. Highly efficient Levenshtein distance but not multi-thread safe.
      * @param maxStringLength the maximum length of strings that will be
      * feed to this algorithm.
      */
@@ -100,27 +100,51 @@ public class EditDistance implements Metric<String> {
     }
 
     /**
-     * Constructor. Damerau-Levenshtein distance.
+     * Constructor. Highly efficient Damerau-Levenshtein distance but not multi-thread safe.
      * @param maxStringLength the maximum length of strings that will be
-     * feed to this algorithm.
-     * @param damerau if true, calculate Damerau-Levenshtein distance instead
-     * of plain Levenshtein distance.
+     *                        feed to this algorithm.
+     * @param damerau if true, calculate Damerau-Levenshtein distance
+     *                instead of plain Levenshtein distance.
      */
     public EditDistance(int maxStringLength, boolean damerau) {
-        FKP = new int[2*maxStringLength+1][maxStringLength+2];
-        damerauDistance = damerau;
-        if (damerau)
-            brf = new BRF2();
-        else
-            brf = new BRF1();
+        this.damerau = damerau;
+        FKP = new IntArray2D(2*maxStringLength+1, maxStringLength+2);
+        brf = damerau ? new DamerauBRF() : new LevenshteinBRF();
+    }
+
+    /**
+     * Constructor. Weighted Levenshtein distance without path
+     * constraints. Only insertion, deletion, and substitution operations are
+     * supported.
+     */
+    public EditDistance(int[][] weight) {
+        this(weight, -1);
+    }
+
+    /**
+     * Constructor. Weighted Levenshtein distance with
+     * Sakoe-Chiba band, which improve computational cost. Only
+     * insertion, deletion, and substitution operations are supported.
+     * @param radius the window width of Sakoe-Chiba band in terms of percentage of sequence length.
+     */
+    public EditDistance(int[][] weight, double radius) {
+        this.weight = new IntArray2D(weight);
+        this.r = radius;
     }
 
     @Override
     public String toString() {
-        if (damerauDistance)
-            return "Damerau-Levenshtein distance";
-        else
-            return "Levenshtein distance";
+        if (damerau) {
+            if (weight != null)
+                return String.format("Damerau-Levenshtein Distance(radius = %d, weight = %s)", r, weight.toString());
+            else
+                return "Damerau-Levenshtein Distance";
+        } else {
+            if (weight != null)
+                return String.format("Levenshtein Distance(radius = %d, weight = %s)", r, weight.toString());
+            else
+                return  "Levenshtein Distance";
+        }
     }
 
     /**
@@ -133,11 +157,8 @@ public class EditDistance implements Metric<String> {
     public double d(String x, String y) {
         if (weight != null)
             return weightedEdit(x, y);
-        else if (x.length() == 1 || y.length() == 1)
-            if (damerauDistance)
-                return damerau(x, y);
-            else
-                return levenshtein(x, y);
+        else if (FKP == null || x.length() == 1 || y.length() == 1)
+            return damerau ? damerau(x, y) : levenshtein(x, y);
         else
             return br(x, y);
     }
@@ -151,11 +172,8 @@ public class EditDistance implements Metric<String> {
     public double d(char[] x, char[] y) {
         if (weight != null)
             return weightedEdit(x, y);
-        else if (x.length == 1 || y.length == 1)
-            if (damerauDistance)
-                return damerau(x, y);
-            else
-                return levenshtein(x, y);
+        else if (FKP == null || x.length == 1 || y.length == 1)
+            return damerau ? damerau(x, y) : levenshtein(x, y);
         else
             return br(x, y);
     }
@@ -177,11 +195,11 @@ public class EditDistance implements Metric<String> {
 
         d[0][0] = 0.0;
         for (int j = 1; j <= y.length; j++) {
-            d[0][j] = d[0][j - 1] + weight[0][y[j]];
+            d[0][j] = d[0][j - 1] + weight.get(0, y[j]);
         }
 
         for (int i = 1; i <= x.length; i++) {
-            d[1][0] = d[0][0] + weight[x[i]][0];
+            d[1][0] = d[0][0] + weight.get(x[i], 0);
 
             int start = 1;
             int end = y.length;
@@ -201,10 +219,10 @@ public class EditDistance implements Metric<String> {
             }
 
             for (int j = start; j <= end; j++) {
-                double cost = weight[x[i - 1]][y[j - 1]];
-                d[1][j] = Math.min(
-                        d[0][j] + weight[x[i - 1]][0], // deletion
-                        d[1][j - 1] + weight[0][y[j - 1]], // insertion
+                double cost = weight.get(x[i - 1], y[j - 1]);
+                d[1][j] = MathEx.min(
+                        d[0][j] + weight.get(x[i - 1], 0), // deletion
+                        d[1][j - 1] + weight.get(0, y[j - 1]), // insertion
                         d[0][j - 1] + cost); // substitution
             }
 
@@ -233,11 +251,11 @@ public class EditDistance implements Metric<String> {
 
         d[0][0] = 0.0;
         for (int j = 1; j <= y.length(); j++) {
-            d[0][j] = d[0][j - 1] + weight[0][y.charAt(j)];
+            d[0][j] = d[0][j - 1] + weight.get(0, y.charAt(j));
         }
 
         for (int i = 1; i <= x.length(); i++) {
-            d[1][0] = d[0][0] + weight[x.charAt(i)][0];
+            d[1][0] = d[0][0] + weight.get(x.charAt(i), 0);
 
             int start = 1;
             int end = y.length();
@@ -257,10 +275,10 @@ public class EditDistance implements Metric<String> {
             }
 
             for (int j = start; j <= end; j++) {
-                double cost = weight[x.charAt(i - 1)][y.charAt(j - 1)];
-                d[1][j] = Math.min(
-                        d[0][j] + weight[x.charAt(i - 1)][0], // deletion
-                        d[1][j - 1] + weight[0][y.charAt(j - 1)], // insertion
+                double cost = weight.get(x.charAt(i - 1), y.charAt(j - 1));
+                d[1][j] = MathEx.min(
+                        d[0][j] + weight.get(x.charAt(i - 1), 0), // deletion
+                        d[1][j - 1] + weight.get(0, y.charAt(j - 1)), // insertion
                         d[0][j - 1] + cost); // substitution
             }
 
@@ -287,21 +305,21 @@ public class EditDistance implements Metric<String> {
 
         int ZERO_K = n;
 
-        if (n+2 > FKP[0].length)
-            FKP = new int[2*n+1][n+2];
+        if (n+2 > FKP.ncols())
+            FKP = new IntArray2D(2*n+1, n+2);
 
         for (int k = -ZERO_K; k < 0; k++) {
             int p = -k - 1;
-            FKP[k + ZERO_K][p + 1] = Math.abs(k) - 1;
-            FKP[k + ZERO_K][p] = -Integer.MAX_VALUE;
+            FKP.set(k + ZERO_K, p + 1, Math.abs(k) - 1);
+            FKP.set(k + ZERO_K, p, Integer.MIN_VALUE);
         }
 
-        FKP[ZERO_K][0] = -1;
+        FKP.set(ZERO_K, 0, -1);
 
         for (int k = 1; k <= ZERO_K; k++) {
             int p = k - 1;
-            FKP[k + ZERO_K][p + 1] = -1;
-            FKP[k + ZERO_K][p] = -Integer.MAX_VALUE;
+            FKP.set(k + ZERO_K, p + 1, -1);
+            FKP.set(k + ZERO_K, p, Integer.MIN_VALUE);
         }
 
         int p = n - m - 1;
@@ -318,7 +336,7 @@ public class EditDistance implements Metric<String> {
             }
 
             brf.f(x, y, FKP, ZERO_K, n - m, p);
-        } while (FKP[(n - m) + ZERO_K][p] != m);
+        } while (FKP.get((n - m) + ZERO_K, p) != m);
 
         return p - 1;
     }
@@ -338,21 +356,21 @@ public class EditDistance implements Metric<String> {
 
         int ZERO_K = n;
 
-        if (n+3 > FKP[0].length)
-            FKP = new int[2*n+1][n+3];
+        if (n+3 > FKP.ncols())
+            FKP = new IntArray2D(2*n+1, n+3);
 
         for (int k = -ZERO_K; k < 0; k++) {
             int p = -k - 1;
-            FKP[k + ZERO_K][p + 1] = Math.abs(k) - 1;
-            FKP[k + ZERO_K][p] = -Integer.MAX_VALUE;
+            FKP.set(k + ZERO_K, p + 1, Math.abs(k) - 1);
+            FKP.set(k + ZERO_K, p, Integer.MIN_VALUE);
         }
 
-        FKP[ZERO_K][0] = -1;
+        FKP.set(ZERO_K, 0, -1);
 
         for (int k = 1; k <= ZERO_K; k++) {
             int p = k - 1;
-            FKP[k + ZERO_K][p + 1] = -1;
-            FKP[k + ZERO_K][p] = -Integer.MAX_VALUE;
+            FKP.set(k + ZERO_K, p + 1, -1);
+            FKP.set(k + ZERO_K, p, Integer.MIN_VALUE);
         }
 
         int p = n - m - 1;
@@ -369,86 +387,90 @@ public class EditDistance implements Metric<String> {
             }
 
             brf.f(x, y, FKP, ZERO_K, n - m, p);
-        } while (FKP[(n - m) + ZERO_K][p] != m);
+        } while (FKP.get((n - m) + ZERO_K, p) != m);
 
         return p - 1;
     }
 
-    private static interface BRF {
+    private interface BRF {
         /**
          * Calculate FKP arrays in BR's algorithm.
          */
-        public void f(char[] x, char[] y, int[][] FKP, int ZERO_K, int k, int p);
+        void f(char[] x, char[] y, IntArray2D FKP, int ZERO_K, int k, int p);
         /**
          * Calculate FKP arrays in BR's algorithm.
          */
-        public void f(String x, String y, int[][] FKP, int ZERO_K, int k, int p);
+        void f(String x, String y, IntArray2D FKP, int ZERO_K, int k, int p);
     }
     
-    private static class BRF1 implements BRF {
+    private static class LevenshteinBRF implements BRF {
         @Override
-        public void f(char[] x, char[] y, int[][] FKP, int ZERO_K, int k, int p) {
-            int t = Math.max(FKP[k + ZERO_K][p] + 1, FKP[k - 1 + ZERO_K][p], FKP[k + 1 + ZERO_K][p] + 1);
+        public void f(char[] x, char[] y, IntArray2D FKP, int ZERO_K, int k, int p) {
+            int t = MathEx.max(FKP.get(k + ZERO_K, p) + 1, FKP.get(k - 1 + ZERO_K, p), FKP.get(k + 1 + ZERO_K, p) + 1);
+            int mnk = Math.min(x.length, y.length - k);
 
-            while (t < Math.min(x.length, y.length - k) && x[t] == y[t + k]) {
+            while (t < mnk && x[t] == y[t + k]) {
                 t++;
             }
 
-            FKP[k + ZERO_K][p + 1] = t;
+            FKP.set(k + ZERO_K, p + 1, t);
         }
 
         @Override
-        public void f(String x, String y, int[][] FKP, int ZERO_K, int k, int p) {
-            int t = Math.max(FKP[k + ZERO_K][p] + 1, FKP[k - 1 + ZERO_K][p], FKP[k + 1 + ZERO_K][p] + 1);
+        public void f(String x, String y, IntArray2D FKP, int ZERO_K, int k, int p) {
+            int t = MathEx.max(FKP.get(k + ZERO_K, p) + 1, FKP.get(k - 1 + ZERO_K, p), FKP.get(k + 1 + ZERO_K, p) + 1);
+            int mnk = Math.min(x.length(), y.length() - k);
 
-            while (t < Math.min(x.length(), y.length() - k) && x.charAt(t) == y.charAt(t + k)) {
+            while (t < mnk && x.charAt(t) == y.charAt(t + k)) {
                 t++;
             }
 
-            FKP[k + ZERO_K][p + 1] = t;
+            FKP.set(k + ZERO_K, p + 1, t);
         }
     }
 
     /**
      * Calculate FKP arrays in BR's algorithm with support of transposition operation.
      */
-    private static class BRF2 implements BRF {
+    private static class DamerauBRF implements BRF {
         @Override
-        public void f(char[] x, char[] y, int[][] FKP, int ZERO_K, int k, int p) {
-            int t = FKP[k + ZERO_K][p] + 1;
+        public void f(char[] x, char[] y, IntArray2D FKP, int ZERO_K, int k, int p) {
+            int t = FKP.get(k + ZERO_K, p) + 1;
+            int mnk = Math.min(x.length, y.length - k);
 
-            if (t > 1 && k + t > 1 && t < Math.min(x.length, y.length - k)) {
+            if (t >= 1 && k + t >= 1 && t < mnk) {
                 if (x[t - 1] == y[k + t] && x[t] == y[k + t - 1]) {
                     t++;
                 }
             }
 
-            t = Math.max(FKP[k - 1 + ZERO_K][p], FKP[k + 1 + ZERO_K][p] + 1, t);
+            t = MathEx.max(FKP.get(k - 1 + ZERO_K, p), FKP.get(k + 1 + ZERO_K, p) + 1, t);
 
-            while (t < Math.min(x.length, y.length - k) && x[t] == y[t + k]) {
+            while (t < mnk && x[t] == y[t + k]) {
                 t++;
             }
 
-            FKP[k + ZERO_K][p + 1] = t;
+            FKP.set(k + ZERO_K, p + 1, t);
         }
 
         @Override
-        public void f(String x, String y, int[][] FKP, int ZERO_K, int k, int p) {
-            int t = FKP[k + ZERO_K][p] + 1;
+        public void f(String x, String y, IntArray2D FKP, int ZERO_K, int k, int p) {
+            int t = FKP.get(k + ZERO_K, p) + 1;
+            int mnk = Math.min(x.length(), y.length() - k);
 
-            if (t > 1 && k + t > 1 && t < Math.min(x.length(), y.length() - k)) {
+            if (t >= 1 && k + t >= 1 && t < mnk) {
                 if (x.charAt(t - 1) == y.charAt(k + t) && x.charAt(t) == y.charAt(k + t - 1)) {
                     t++;
                 }
             }
 
-            t = Math.max(FKP[k - 1 + ZERO_K][p], FKP[k + 1 + ZERO_K][p] + 1, t);
+            t = MathEx.max(FKP.get(k - 1 + ZERO_K, p), FKP.get(k + 1 + ZERO_K, p) + 1, t);
 
-            while (t < Math.min(x.length(), y.length() - k) && x.charAt(t) == y.charAt(t + k)) {
+            while (t < mnk && x.charAt(t) == y.charAt(t + k)) {
                 t++;
             }
 
-            FKP[k + ZERO_K][p + 1] = t;
+            FKP.set(k + ZERO_K, p + 1, t);
         }
     }
 
@@ -476,7 +498,7 @@ public class EditDistance implements Metric<String> {
 
             for (int j = 1; j <= y.length(); j++) {
                 int cost = x.charAt(i - 1) == y.charAt(j - 1) ? 0 : 1;
-                d[1][j] = Math.min(
+                d[1][j] = MathEx.min(
                         d[0][j] + 1, // deletion
                         d[1][j - 1] + 1, // insertion
                         d[0][j - 1] + cost); // substitution
@@ -513,7 +535,7 @@ public class EditDistance implements Metric<String> {
 
             for (int j = 1; j <= y.length; j++) {
                 int cost = x[i - 1] == y[j - 1] ? 0 : 1;
-                d[1][j] = Math.min(
+                d[1][j] = MathEx.min(
                         d[0][j] + 1, // deletion
                         d[1][j - 1] + 1, // insertion
                         d[0][j - 1] + cost); // substitution
@@ -550,7 +572,7 @@ public class EditDistance implements Metric<String> {
 
             for (int j = 1; j <= y.length(); j++) {
                 int cost = x.charAt(i-1) == y.charAt(j-1) ? 0 : 1;
-                d[2][j] = Math.min(
+                d[2][j] = MathEx.min(
                         d[1][j] + 1,       // deletion
                         d[2][j-1] + 1,       // insertion
                         d[1][j-1] + cost); // substitution
@@ -594,7 +616,7 @@ public class EditDistance implements Metric<String> {
 
             for (int j = 1; j <= y.length; j++) {
                 int cost = x[i-1] == y[j-1] ? 0 : 1;
-                d[2][j] = Math.min(
+                d[2][j] = MathEx.min(
                         d[1][j] + 1,       // deletion
                         d[2][j-1] + 1,       // insertion
                         d[1][j-1] + cost); // substitution

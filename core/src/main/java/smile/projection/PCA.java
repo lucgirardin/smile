@@ -1,26 +1,26 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.projection;
 
 import java.io.Serializable;
-import smile.math.Math;
+import smile.math.MathEx;
+import smile.math.blas.UPLO;
 import smile.math.matrix.Matrix;
-import smile.math.matrix.DenseMatrix;
-import smile.math.matrix.EVD;
-import smile.math.matrix.SVD;
 
 /**
  * Principal component analysis. PCA is an orthogonal
@@ -60,8 +60,8 @@ import smile.math.matrix.SVD;
  * 
  * @author Haifeng Li
  */
-public class PCA implements Projection<double[]>, Serializable {
-    private static final long serialVersionUID = 1L;
+public class PCA implements LinearProjection, Serializable {
+    private static final long serialVersionUID = 2L;
 
     /**
      * The dimension of feature space.
@@ -82,7 +82,7 @@ public class PCA implements Projection<double[]>, Serializable {
     /**
      * The matrix of variable loadings, whose columns contain the eigenvectors.
      */
-    private DenseMatrix eigvectors;
+    private Matrix eigvectors;
     /**
      * Eigenvalues of principal components.
      */
@@ -98,47 +98,65 @@ public class PCA implements Projection<double[]>, Serializable {
     /**
      * Projection matrix.
      */
-    private DenseMatrix projection;
+    private Matrix projection;
 
     /**
-     * Constructor. Learn principal component analysis with covariance matrix.
+     * Constructor.
+     * @param mu the mean of samples.
+     * @param eigvalues the eigen values of principal components.
+     * @param loadings the matrix of variable loadings.
      */
-    public PCA(double[][] data) {
-        this(data, false);
+    public PCA(double[] mu, double[] eigvalues, Matrix loadings) {
+        this.mu = mu;
+        this.eigvalues = eigvalues;
+        this.eigvectors = loadings;
+        this.n = mu.length;
+
+        proportion = eigvalues.clone();
+        MathEx.unitize1(proportion);
+
+        cumulativeProportion = new double[eigvalues.length];
+        cumulativeProportion[0] = proportion[0];
+        for (int i = 1; i < eigvalues.length; i++) {
+            cumulativeProportion[i] = cumulativeProportion[i - 1] + proportion[i];
+        }
+
+        setProjection(0.95);
     }
 
     /**
-     * Constructor. Learn principal component analysis.
-     * @param data training data of which each row is a sample. If the sample size
-     * is larger than the data dimension and cor = false, SVD is employed for
-     * efficiency. Otherwise, eigen decomposition on covariance or correlation
-     * matrix is performed.
-     * @param cor true use correlation matrix instead of covariance matrix if true.
+     * Fits principal component analysis with covariance matrix.
+     * @param data training data of which each row is a sample.
+     *             If the sample size is larger than the data
+     *             dimension and cor = false, SVD is employed for
+     *             efficiency. Otherwise, eigen decomposition on
+     *             covariance or correlation matrix is performed.
      */
-    public PCA(double[][] data, boolean cor) {
+    public static PCA fit(double[][] data) {
         int m = data.length;
-        n = data[0].length;
+        int n = data[0].length;
 
-        mu = Math.colMeans(data);
-        DenseMatrix x = Matrix.newInstance(data);
+        double[] mu = MathEx.colMeans(data);
+        Matrix x = new Matrix(data);
         for (int j = 0; j < n; j++) {
             for (int i = 0; i < m; i++) {
                 x.sub(i, j, mu[j]);
             }
         }
 
-        if (m > n && !cor) {
-            SVD svd = x.svd();
-            eigvalues = svd.getSingularValues();
+        double[] eigvalues;
+        Matrix eigvectors;
+        if (m > n) {
+            Matrix.SVD svd = x.svd();
+            eigvalues = svd.s;
             for (int i = 0; i < eigvalues.length; i++) {
                 eigvalues[i] *= eigvalues[i];
             }
 
-            eigvectors = svd.getV();
-
+            eigvectors = svd.V;
         } else {
 
-            DenseMatrix cov = Matrix.zeros(n, n);
+            Matrix cov = new Matrix(n, n);
             for (int k = 0; k < m; k++) {
                 for (int i = 0; i < n; i++) {
                     for (int j = 0; j <= i; j++) {
@@ -154,47 +172,75 @@ public class PCA implements Projection<double[]>, Serializable {
                 }
             }
 
-            double[] sd = null;
-            if (cor) {
-                sd = new double[n];
-                for (int i = 0; i < n; i++) {
-                    sd[i] = Math.sqrt(cov.get(i, i));
-                }
+            cov.uplo(UPLO.LOWER);
+            Matrix.EVD eigen = cov.eigen().sort();
 
-                for (int i = 0; i < n; i++) {
-                    for (int j = 0; j <= i; j++) {
-                        cov.div(i, j, sd[i] * sd[j]);
-                        cov.set(j, i, cov.get(i, j));
-                    }
-                }
-            }
-
-            cov.setSymmetric(true);
-            EVD eigen = cov.eigen();
-
-            DenseMatrix loadings = eigen.getEigenVectors();
-            if (cor) {
-                for (int i = 0; i < n; i++) {
-                    for (int j = 0; j < n; j++) {
-                        loadings.div(i, j, sd[i]);
-                    }
-                }
-            }
-
-            eigvalues = eigen.getEigenValues();
-            eigvectors = loadings;
+            eigvalues = eigen.wr;
+            eigvectors = eigen.Vr;
         }
 
-        proportion = eigvalues.clone();
-        Math.unitize1(proportion);
+        return new PCA(mu, eigvalues, eigvectors);
+    }
 
-        cumulativeProportion = new double[eigvalues.length];
-        cumulativeProportion[0] = proportion[0];
-        for (int i = 1; i < eigvalues.length; i++) {
-            cumulativeProportion[i] = cumulativeProportion[i - 1] + proportion[i];
+    /**
+     * Fits principal component analysis with correlation matrix.
+     * @param data training data of which each row is a sample.
+     *             If the sample size is larger than the data
+     *             dimension and cor = false, SVD is employed for
+     *             efficiency. Otherwise, eigen decomposition on
+     *             covariance or correlation matrix is performed.
+     */
+    public static PCA cor(double[][] data) {
+        int m = data.length;
+        int n = data[0].length;
+
+        double[] mu = MathEx.colMeans(data);
+        Matrix x = new Matrix(data);
+        for (int j = 0; j < n; j++) {
+            for (int i = 0; i < m; i++) {
+                x.sub(i, j, mu[j]);
+            }
         }
 
-        setProjection(0.95);
+        Matrix cov = new Matrix(n, n);
+        for (int k = 0; k < m; k++) {
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j <= i; j++) {
+                    cov.add(i, j, x.get(k, i) * x.get(k, j));
+                }
+            }
+        }
+
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j <= i; j++) {
+                cov.div(i, j, m); // divide m instead of m-1 for S-PLUS compatibility
+                cov.set(j, i, cov.get(i, j));
+            }
+        }
+
+        double[] sd = new double[n];
+        for (int i = 0; i < n; i++) {
+            sd[i] = Math.sqrt(cov.get(i, i));
+        }
+
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j <= i; j++) {
+                cov.div(i, j, sd[i] * sd[j]);
+                cov.set(j, i, cov.get(i, j));
+            }
+        }
+
+        cov.uplo(UPLO.LOWER);
+        Matrix.EVD eigen = cov.eigen().sort();
+
+        Matrix loadings = eigen.Vr;
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                loadings.div(i, j, sd[i]);
+            }
+        }
+
+        return new PCA(mu, eigen.wr, loadings);
     }
 
     /**
@@ -208,7 +254,7 @@ public class PCA implements Projection<double[]>, Serializable {
      * Returns the variable loading matrix, ordered from largest to smallest
      * by corresponding eigenvalues. The matrix columns contain the eigenvectors.
      */
-    public DenseMatrix getLoadings() {
+    public Matrix getLoadings() {
         return eigvectors;
     }
 
@@ -236,11 +282,8 @@ public class PCA implements Projection<double[]>, Serializable {
         return cumulativeProportion;
     }
 
-    /**
-     * Returns the projection matrix W. The dimension reduced data can be obtained
-     * by y = W' * x.
-     */
-    public DenseMatrix getProjection() {
+    @Override
+    public Matrix getProjection() {
         return projection;
     }
 
@@ -254,15 +297,14 @@ public class PCA implements Projection<double[]>, Serializable {
         }
 
         this.p = p;
-        projection = Matrix.zeros(p, n);
+        projection = new Matrix(p, n);
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < p; j++) {
                 projection.set(j, i, eigvectors.get(i, j));
             }
         }
 
-        pmu = new double[p];
-        projection.ax(mu, pmu);
+        pmu = projection.mv(mu);
 
         return this;
     }
@@ -293,9 +335,8 @@ public class PCA implements Projection<double[]>, Serializable {
             throw new IllegalArgumentException(String.format("Invalid input vector size: %d, expected: %d", x.length, n));
         }
 
-        double[] y = new double[p];
-        projection.ax(x, y);
-        Math.minus(y, pmu);
+        double[] y = projection.mv(x);
+        MathEx.sub(y, pmu);
         return y;
     }
 
@@ -307,8 +348,8 @@ public class PCA implements Projection<double[]>, Serializable {
 
         double[][] y = new double[x.length][p];
         for (int i = 0; i < x.length; i++) {
-            projection.ax(x[i], y[i]);
-            Math.minus(y[i], pmu);
+            projection.mv(x[i], y[i]);
+            MathEx.sub(y[i], pmu);
         }
         return y;
     }

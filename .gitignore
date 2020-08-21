@@ -3,11 +3,24 @@
 # Intellij
 .idea
 
+# jupyter
+.ipynb_checkpoints
+
 # javadoc
-shell/src/universal/doc/api/
+doc/api
+web/node_modules/
+web/_site/
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
+
+#clojure
+.lein-repl-*
+clojure/pom.xml*
+
+#gradle
+.gradle
+build
 
 # Package Files #
 *.jar

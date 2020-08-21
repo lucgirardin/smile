@@ -1,22 +1,23 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.validation;
 
-import smile.math.Math;
+import smile.math.MathEx;
 
 /**
  * Rand Index. Rand index is defined as the number of pairs of objects
@@ -35,71 +36,45 @@ import smile.math.Math;
  * @author Haifeng Li
  */
 public class RandIndex implements ClusterMeasure {
+    public final static RandIndex instance = new RandIndex();
 
     @Override
     public double measure(int[] y1, int[] y2) {
-        if (y1.length != y2.length) {
-            throw new IllegalArgumentException(String.format("The vector sizes don't match: %d != %d.", y1.length, y2.length));
-        }
+        return of(y1, y2);
+    }
 
-        // Get # of non-zero classes in each solution
-        int n = y1.length;
-
-        int[] label1 = Math.unique(y1);
-        int n1 = label1.length;
-        
-        int[] label2 = Math.unique(y2);
-        int n2 = label2.length;
-
-        // Calculate N contingency matrix
-        int[][] count = new int[n1][n2];
-        for (int i = 0; i < n1; i++) {
-            for (int j = 0; j < n2; j++) {
-                int match = 0;
-
-                for (int k = 0; k < n; k++) {
-                    if (y1[k] == label1[i] && y2[k] == label2[j]) {
-                        match++;
-                    }
-                }
-
-                count[i][j] = match;
-            }
-        }
-
-        // Marginals
-        int[] count1 = new int[n1];
-        int[] count2 = new int[n2];
-
-        for (int i = 0; i < n1; i++) {
-            for (int j = 0; j < n2; j++) {
-                count1[i] += count[i][j];
-                count2[j] += count[i][j];
-            }
-        }
+    /** Calculates the rand index. */
+    public static double of(int[] y1, int[] y2) {
+        ContingencyTable contingency = new ContingencyTable(y1, y2);
+        int n = contingency.n;
+        int n1 = contingency.n1;
+        int n2 = contingency.n2;
+        int[] a = contingency.a;
+        int[] b = contingency.b;
+        int[][] count = contingency.table;
 
         // Calculate RAND - Non-adjusted
-        double rand_T = 0.0;
+        double randT = 0.0;
         for (int i = 0; i < n1; i++) {
             for (int j = 0; j < n2; j++) {
-                rand_T += Math.sqr(count[i][j]);
+                randT += MathEx.sqr(count[i][j]);
             }
         }
-        rand_T -= n;
+        randT -= n;
 
-        double rand_P = 0.0;
+        double randP = 0.0;
         for (int i = 0; i < n1; i++) {
-            rand_P += Math.sqr(count1[i]);
+            randP += MathEx.sqr(a[i]);
         }
-        rand_P -= n;
+        randP -= n;
 
-        double rand_Q = 0.0;
+        double randQ = 0.0;
         for (int j = 0; j < n2; j++) {
-            rand_Q += Math.sqr(count2[j]);
+            randQ += MathEx.sqr(b[j]);
         }
-        rand_Q -= n;
+        randQ -= n;
 
-        double rand = (rand_T - 0.5 * rand_P - 0.5 * rand_Q + Math.choose(n, 2)) / Math.choose(n, 2);
+        double rand = (randT - 0.5 * randP - 0.5 * randQ + MathEx.choose(n, 2)) / MathEx.choose(n, 2);
         return rand;
     }
 

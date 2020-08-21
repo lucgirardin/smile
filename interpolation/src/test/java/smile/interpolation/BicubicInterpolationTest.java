@@ -1,18 +1,19 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.interpolation;
 
@@ -65,15 +66,15 @@ public class BicubicInterpolationTest {
         };
 
         BicubicInterpolation instance = new BicubicInterpolation(x1, x2, y);
-        assertEquals(203.212, instance.interpolate(1970, 10), 1E-3);
-        assertEquals(179.092, instance.interpolate(1970, 20), 1E-3);
-        assertEquals(249.633, instance.interpolate(1990, 10), 1E-3);
-        assertEquals(598.243, instance.interpolate(1990, 30), 1E-3);
-//        assertEquals(182.7523, instance.interpolate(1950, 15), 1E-4);
-//        assertEquals(109.0428, instance.interpolate(1990, 15), 1E-4);
-//        assertEquals(504.0428, instance.interpolate(1985, 30), 1E-4);
-//        assertEquals(160.1369, instance.interpolate(1975, 15), 1E-4);
-        assertEquals(167.4893, instance.interpolate(1975, 20), 1E-4);
-//        assertEquals(236.9633, instance.interpolate(1975, 25), 1E-4);
+        assertEquals(203.212,    instance.interpolate(1970, 10), 1E-3);
+        assertEquals(179.092,    instance.interpolate(1970, 20), 1E-3);
+        assertEquals(249.633,    instance.interpolate(1990, 10), 1E-3);
+        assertEquals(598.243,    instance.interpolate(1990, 30), 1E-3);
+        assertEquals(178.948375, instance.interpolate(1950, 15), 1E-4);
+        assertEquals(146.99987,  instance.interpolate(1990, 15), 1E-4);
+        assertEquals(508.26462,  instance.interpolate(1985, 30), 1E-4);
+        assertEquals(175.667289, instance.interpolate(1975, 15), 1E-4);
+        assertEquals(167.4893,   instance.interpolate(1975, 20), 1E-4);
+        assertEquals(252.493726, instance.interpolate(1975, 25), 1E-4);
     }
 }

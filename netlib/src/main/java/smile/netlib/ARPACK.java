@@ -1,28 +1,28 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.netlib;
 
 import org.netlib.util.doubleW;
 import org.netlib.util.intW;
-import smile.math.Math;
+import smile.math.MathEx;
 import smile.math.matrix.DenseMatrix;
 import smile.math.matrix.Matrix;
 import smile.math.matrix.EVD;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * ARPACK based eigen decomposition. Currently support only symmetric matrix.
@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * @author Haifeng Li
  */
 public class ARPACK {
-    private static final Logger logger = LoggerFactory.getLogger(ARPACK.class);
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ARPACK.class);
 
     /** Specify which of the Ritz values of OP to compute. */
     public enum Ritz {
@@ -62,7 +62,7 @@ public class ARPACK {
      * Find k approximate eigen pairs of a symmetric matrix by the
      * Lanczos algorithm.
      *
-     * @param k Number of eigenvalues of OP to be computed. 0 < k < N.
+     * @param k Number of eigenvalues of OP to be computed. 0 &lt; k &lt; N.
      * @param ritz Specify which of the Ritz values to compute.
      */
     public static EVD eigen(Matrix A, int k, Ritz ritz) {
@@ -73,7 +73,7 @@ public class ARPACK {
      * Find k approximate eigen pairs of a symmetric matrix by the
      * Lanczos algorithm.
      *
-     * @param k Number of eigenvalues of OP to be computed. 0 < k < N.
+     * @param k Number of eigenvalues of OP to be computed. 0 &lt; k &lt; N.
      * @param which Specify which of the Ritz values to compute.
      */
     public static EVD eigen(Matrix A, int k, String which) {
@@ -84,7 +84,7 @@ public class ARPACK {
      * Find k approximate eigen pairs of a symmetric matrix by the
      * Lanczos algorithm.
      *
-     * @param k Number of eigenvalues of OP to be computed. 0 < k < N.
+     * @param k Number of eigenvalues of OP to be computed. 0 &lt; k &lt; N.
      * @param ritz Specify which of the Ritz values to compute.
      * @param kappa Relative accuracy of ritz values acceptable as eigenvalues.
      * @param maxIter Maximum number of iterations.
@@ -97,7 +97,7 @@ public class ARPACK {
      * Find k approximate eigen pairs of a symmetric matrix by the
      * Lanczos algorithm.
      *
-     * @param k Number of eigenvalues of OP to be computed. 0 < NEV < N.
+     * @param k Number of eigenvalues of OP to be computed. 0 &lt; NEV &lt; N.
      * @param which Specify which of the Ritz values to compute.
      * @param kappa Relative accuracy of ritz values acceptable as eigenvalues.
      * @param maxIter Maximum number of iterations.
@@ -117,7 +117,7 @@ public class ARPACK {
             throw new IllegalArgumentException("Invalid NEV parameter k: " + k);
         }
 
-        if (kappa <= Math.EPSILON) {
+        if (kappa <= MathEx.EPSILON) {
             throw new IllegalArgumentException("Invalid tolerance: kappa = " + kappa);
         }
 

@@ -1,39 +1,40 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.interpolation;
 
-import smile.math.Math;
+import smile.math.MathEx;
+import smile.math.blas.UPLO;
 import smile.math.matrix.Matrix;
-import smile.math.matrix.DenseMatrix;
 import smile.math.rbf.GaussianRadialBasis;
 import smile.math.rbf.RadialBasisFunction;
-import smile.math.matrix.Cholesky;
-import smile.math.matrix.LU;
 
 /**
- * Radial basis function interpolation is a popular method for the data points are
- * irregularly distributed in space. In its basic form, radial basis function
- * interpolation is in the form
+ * Radial basis function interpolation is a popular method for the data points
+ * are irregularly distributed in space. In its basic form, radial basis
+ * function interpolation is in the form
  * <p>
- * y(x) = &Sigma; w<sub>i</sub> &phi;(||x-c<sub>i</sub>||)
- * <p>
+ * <pre>
+ *     y(x) = &Sigma; w<sub>i</sub> &phi;(||x-c<sub>i</sub>||)
+ * </pre>
  * where the approximating function y(x) is represented as a sum of N radial
- * basis functions &phi;, each associated with a different center c<sub>i</sub>, and weighted
- * by an appropriate coefficient w<sub>i</sub>. For distance, one usually chooses
- * euclidean distance. The weights w<sub>i</sub> can
+ * basis functions &phi;, each associated with a different center c<sub>i</sub>,
+ * and weighted by an appropriate coefficient w<sub>i</sub>. For distance,
+ * one usually chooses euclidean distance. The weights w<sub>i</sub> can
  * be estimated using the matrix methods of linear least squares, because
  * the approximating function is linear in the weights.
  * <p>
@@ -48,7 +49,7 @@ import smile.math.matrix.LU;
  * Other popular choices for &phi; comprise the Gaussian function and the so
  * called thin plate splines. Thin plate splines result from the solution of
  * a variational problem. The advantage of the thin plate splines is that
- * their conditioning is invariant under scalings. Gaussians, multi-quadrics
+ * their conditioning is invariant under scaling. Gaussians, multi-quadrics
  * and inverse multi-quadrics are infinitely smooth and and involve a scale
  * or shape parameter, r<sub><small>0</small></sub> &gt; 0.
  * Decreasing r<sub><small>0</small></sub> tends to
@@ -109,12 +110,12 @@ public class RBFInterpolation {
 
         int n = x.length;
 
-        DenseMatrix G = Matrix.zeros(n, n);
+        Matrix G = new Matrix(n, n);
         double[] rhs = new double[n];
         for (int i = 0; i < n; i++) {
             double sum = 0.0;
             for (int j = 0; j <= i; j++) {
-                double r = rbf.f(Math.distance(x[i], x[j]));
+                double r = rbf.f(MathEx.distance(x[i], x[j]));
                 G.set(i, j, r);
                 G.set(j, i, r);
                 sum += 2 * r;
@@ -128,13 +129,12 @@ public class RBFInterpolation {
         }
 
         if (rbf instanceof GaussianRadialBasis) {
-            Cholesky cholesky = G.cholesky();
-            cholesky.solve(rhs);
-            w = rhs;
+            G.uplo(UPLO.LOWER);
+            Matrix.Cholesky cholesky = G.cholesky();
+            w = cholesky.solve(rhs);
         } else {
-            LU lu = G.lu(true);
-            lu.solve(rhs);
-            w = rhs;
+            Matrix.LU lu = G.lu();
+            w = lu.solve(rhs);
         }
     }
 
@@ -148,11 +148,16 @@ public class RBFInterpolation {
 
         double sum = 0.0, sumw = 0.0;
         for (int i = 0; i < this.x.length; i++) {
-            double f = rbf.f(Math.distance(x, this.x[i]));
+            double f = rbf.f(MathEx.distance(x, this.x[i]));
             sumw += w[i] * f;
             sum += f;
         }
 
         return normalized ? sumw / sum : sumw;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("RBF Interpolation(%s)", rbf);
     }
 }

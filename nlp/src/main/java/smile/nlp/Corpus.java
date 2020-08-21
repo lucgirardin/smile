@@ -1,18 +1,19 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.nlp;
 
@@ -30,62 +31,62 @@ public interface Corpus {
     /**
      * Returns the number of words in the corpus.
      */
-    public long size();
+    long size();
     
     /**
      * Returns the number of documents in the corpus.
      */
-    public int getNumDocuments();
+    int getNumDocuments();
 
     /**
      * Returns the number of unique terms in the corpus.
      */
-    public int getNumTerms();
+    int getNumTerms();
 
     /**
      * Returns the number of bigrams in the corpus.
      */
-    public long getNumBigrams();
+    long getNumBigrams();
 
     /**
      * Returns the average size of documents in the corpus.
      */
-    public int getAverageDocumentSize();
+    int getAverageDocumentSize();
 
     /**
      * Returns the total frequency of the term in the corpus.
      */
-    public int getTermFrequency(String term);
+    int getTermFrequency(String term);
 
     /**
      * Returns the total frequency of the bigram in the corpus.
      */
-    public int getBigramFrequency(Bigram bigram);
+    int getBigramFrequency(Bigram bigram);
 
     /**
      * Returns an iterator over the terms in the corpus.
      */
-    public Iterator<String> getTerms();
+    Iterator<String> getTerms();
 
     /**
      * Returns an iterator over the bigrams in the corpus.
      */
-    public Iterator<Bigram> getBigrams();
+    Iterator<Bigram> getBigrams();
 
     /**
      * Returns an iterator over the set of documents containing the given term.
      */
-    public Iterator<Text> search(String term);
+    Iterator<Text> search(String term);
 
     /**
      * Returns an iterator over the set of documents containing the given term
      * in descending order of relevance.
      */
-    public Iterator<Relevance> search(RelevanceRanker ranker, String term);
+    Iterator<Relevance> search(RelevanceRanker ranker, String term);
 
     /**
      * Returns an iterator over the set of documents containing (at least one
      * of) the given terms in descending order of relevance.
      */
-    public Iterator<Relevance> search(RelevanceRanker ranker, String[] terms);
+    Iterator<Relevance> search(RelevanceRanker ranker, String[] terms);
 }

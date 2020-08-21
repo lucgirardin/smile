@@ -1,32 +1,32 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 package smile.classification;
 
-import smile.data.NominalAttribute;
-import smile.data.parser.DelimitedTextParser;
-import smile.data.AttributeDataset;
-import smile.data.parser.ArffParser;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import smile.math.Math;
-import smile.validation.LOOCV;
+import smile.data.*;
+import smile.math.MathEx;
+import smile.validation.*;
+import smile.validation.Error;
+
 import static org.junit.Assert.*;
 
 /**
@@ -54,71 +54,53 @@ public class LDATest {
     public void tearDown() {
     }
 
-    /**
-     * Test of learn method, of class LDA.
-     */
     @Test
-    public void testLearn() {
-        System.out.println("learn");
-        ArffParser arffParser = new ArffParser();
-        arffParser.setResponseIndex(4);
-        try {
-            AttributeDataset iris = arffParser.parse(smile.data.parser.IOUtils.getTestDataFile("weka/iris.arff"));
-            double[][] x = iris.toArray(new double[iris.size()][]);
-            int[] y = iris.toArray(new int[iris.size()]);
+    public void testIris() {
+        System.out.println("Iris");
 
-            int n = x.length;
-            LOOCV loocv = new LOOCV(n);
-            int error = 0;
-            double[] posteriori = new double[3];
-            for (int i = 0; i < n; i++) {
-                double[][] trainx = Math.slice(x, loocv.train[i]);
-                int[] trainy = Math.slice(y, loocv.train[i]);
-                LDA lda = new LDA(trainx, trainy);
-
-                if (y[loocv.test[i]] != lda.predict(x[loocv.test[i]], posteriori))
-                    error++;
-                
-                //System.out.println(posteriori[0]+"\t"+posteriori[1]+"\t"+posteriori[2]);
-            }
-            
-            System.out.println("LDA error = " + error);
-            assertEquals(22, error);
-        } catch (Exception ex) {
-            System.err.println(ex);
-        }
+        int[] prediction = LOOCV.classification(Iris.x, Iris.y, (x, y) -> LDA.fit(x, y));
+        int error = Error.of(Iris.y, prediction);
+        System.out.println("Error = " + error);
+        assertEquals(22, error);
     }
 
-    /**
-     * Test of learn method, of class LDA.
-     */
     @Test
-    public void testUSPS() {
+    public void testPenDigits() {
+        System.out.println("Pen Digits");
+
+        MathEx.setSeed(19650218); // to get repeatable results.
+        int[] prediction = CrossValidation.classification(10, PenDigits.x, PenDigits.y, (x, y) -> LDA.fit(x, y));
+        int error = Error.of(PenDigits.y, prediction);
+
+        System.out.println("Error = " + error);
+        assertEquals(884, error);
+    }
+
+    @Test
+    public void testBreastCancer() {
+        System.out.println("Breast Cancer");
+
+        MathEx.setSeed(19650218); // to get repeatable results.
+        int[] prediction = CrossValidation.classification(10, BreastCancer.x, BreastCancer.y, (x, y) -> LDA.fit(x, y));
+        int error = Error.of(BreastCancer.y, prediction);
+
+        System.out.println("Error = " + error);
+        assertEquals(42, error);
+    }
+
+    @Test(expected = Test.None.class)
+    public void testUSPS() throws Exception {
         System.out.println("USPS");
-        DelimitedTextParser parser = new DelimitedTextParser();
-        parser.setResponseIndex(new NominalAttribute("class"), 0);
-        try {
-            AttributeDataset train = parser.parse("USPS Train", smile.data.parser.IOUtils.getTestDataFile("usps/zip.train"));
-            AttributeDataset test = parser.parse("USPS Test", smile.data.parser.IOUtils.getTestDataFile("usps/zip.test"));
 
-            double[][] x = train.toArray(new double[train.size()][]);
-            int[] y = train.toArray(new int[train.size()]);
-            double[][] testx = test.toArray(new double[test.size()][]);
-            int[] testy = test.toArray(new int[test.size()]);
-            
-            LDA lda = new LDA(x, y);
-            
-            int error = 0;
-            for (int i = 0; i < testx.length; i++) {
-                if (lda.predict(testx[i]) != testy[i]) {
-                    error++;
-                }
-            }
+        LDA model = LDA.fit(USPS.x, USPS.y);
 
-            System.out.format("USPS error rate = %.2f%%%n", 100.0 * error / testx.length);
-            assertEquals(256, error);
-        } catch (Exception ex) {
-            System.err.println(ex);
-        }
+        int[] prediction = Validation.test(model, USPS.testx);
+        int error = Error.of(USPS.testy, prediction);
+
+        System.out.println("Error = " + error);
+        assertEquals(256, error);
+
+        java.nio.file.Path temp = smile.data.Serialize.write(model);
+        smile.data.Serialize.read(temp);
     }
 }

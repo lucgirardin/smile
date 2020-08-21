@@ -1,30 +1,23 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.gap;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.Callable;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import smile.math.Math;
-import smile.util.MulticoreExecutor;
 
 /**
  * A genetic algorithm (GA) is a search heuristic that mimics the process of
@@ -124,66 +117,7 @@ import smile.util.MulticoreExecutor;
  * @author Haifeng Li
  */
 public class GeneticAlgorithm <T extends Chromosome> {
-    private static final Logger logger = LoggerFactory.getLogger(GeneticAlgorithm.class);
-
-    /**
-     * The way to select chromosomes from the population as parents to crossover.
-     */
-    public enum Selection {
-
-        /**
-         * Roulette Wheel Selection, also called fitness proportionate selection.
-         * Parents are selected by the ratio of its fitness to the fitness of
-         * other members of the current population.
-         * */
-        ROULETTE_WHEEL,
-        /**
-         * Scaled Roulette Wheel Selection. As the average fitness of
-         * chromosomes in the population increases, the variance of fitness
-         * decreases in the population. There may be little difference between
-         * the best and worst chromosome in the population after several
-         * generations, and the selective pressure based on fitness is
-         * corresponding reduced. This problem can partially be addressed by
-         * using some form of fitness scaling. In the simplest case, on can
-         * subtract the fitness of the worst chromosome in the population
-         * from the fitnesses of all chromosomes in the population.
-         * Alternatively, one may use rank based selection.
-         */
-        SCALED_ROULETTE_WHEEL,
-        /**
-         * Rank Selection. The Roulette Wheel Selection will have problems when
-         * the fitnesses differs very much. For example, if the best chromosome
-         * fitness is 90% of all the roulette wheel then the other chromosomes
-         * will have very few chances to be selected. Rank selection first ranks
-         * the population and then every chromosome receives fitness from this
-         * ranking. The worst will have fitness 1 and the best will have fitness
-         * N (number of chromosomes in population). After this all the
-         * chromosomes have a chance to be selected. But this method can lead
-         * to slower convergence, because the best chromosomes do not differ
-         * so much from other ones.
-         */
-        RANK,
-        /**
-         * Tournament Selection. Tournament selection returns the fittest
-         * individual of some t individuals picked at random, with replacement,
-         * from the population. First choose t (the tournament size) individuals
-         * from the population at random. Then choose the best individual from
-         * tournament with probability p, choose the second best individual with
-         * probability p*(1-p), choose the third best individual with
-         * probability p*((1-p)^2), and so on... Tournament Selection has become
-         * the primary selection technique used for the Genetic Algorithm.
-         * First, it's not sensitive to the particulars of the fitness function.
-         * Second, it's very simple, requires no preprocessing, and works well
-         * with parallel algorithms. Third, it's tunable: by setting the
-         * tournament size t, you can change how selective the technique is.
-         * At the extremes, if t = 1, this is just random search. If t is very
-         * large (much larger than the population size itself), then the
-         * probability that the fittest individual in the population will appear
-         * in the tournament approaches 1.0, and so Tournament Selection just
-         * picks the fittest individual each time.
-         */
-        TOURNAMENT
-    }
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(GeneticAlgorithm.class);
 
     /**
      * Population size.
@@ -196,7 +130,7 @@ public class GeneticAlgorithm <T extends Chromosome> {
     /**
      * Selection strategy.
      */
-    private Selection selection = Selection.TOURNAMENT;
+    private Selection selection;
     /**
      * The number of best chromosomes to copy to new population. When creating
      * new population by crossover and mutation, we have a big chance, that we
@@ -205,32 +139,20 @@ public class GeneticAlgorithm <T extends Chromosome> {
      * classical way. Elitism can very rapidly increase performance of GA,
      * because it prevents losing the best found solution.
      */
-    private int elitism = 1;
-    /**
-     * The tournament size in tournament selection.
-     */
-    private int tournamentSize = 3;
-    /**
-     * The probability of best player wins in tournament selection.
-     */
-    private double tournamentProbability = 0.95;
+    private int elitism;
     /**
      * The number of iterations of local search in case Lamarckian algorithm.
      */
     private int t = 5;
-    /**
-     * Parallel tasks to evaluate the fitness of population.
-     */
-    private List<Task> tasks = new ArrayList<>();
     
     /**
      * Constructor. The default selection strategy is tournament selection
-     * of size 2.
+     * of size 3 and probability 0.95.
      * Elitism is also used (the best chromosome is copied to next generation).
      * @param seeds the initial population, which is usually randomly generated.
      */
     public GeneticAlgorithm(T[] seeds) {
-        this(seeds, Selection.TOURNAMENT);
+        this(seeds, Selection.Tournament(3, 0.95), 1);
     }
 
     /**
@@ -238,14 +160,23 @@ public class GeneticAlgorithm <T extends Chromosome> {
      * to next generation).
      * @param selection the selection strategy.
      * @param seeds the initial population, which is usually randomly generated.
+     * @param elitism the number of best chromosomes to copy to new population.
+     *                When creating new population by crossover and mutation,
+     *                we have a big chance, that we will loose the best chromosome.
+     *                Elitism first copies the best chromosome (or a few best
+     *                chromosomes) to new population. The rest is done in classical
+     *                way. Elitism can very rapidly increase performance of GA,
+     *                because it prevents losing the best found solution.
      */
-    public GeneticAlgorithm(T[] seeds, Selection selection) {
+    public GeneticAlgorithm(T[] seeds, Selection selection, int elitism) {
+        if (elitism < 0 || elitism >= seeds.length) {
+            throw new IllegalArgumentException("Invalid elitism: " + elitism);
+        }
+
         this.size = seeds.length;
         this.population = seeds;
         this.selection = selection;
-        for (int i = 0; i < size; i++) {
-            tasks.add(new Task(i));
-        }
+        this.elitism = elitism;
     }
 
     /**
@@ -253,64 +184,6 @@ public class GeneticAlgorithm <T extends Chromosome> {
      */
     public T[] population() {
         return population;
-    }
-
-    /**
-     * Sets the number of best chromosomes to copy to new population. Sets the
-     * value to zero to disable elitism selection. When creating new population
-     * by crossover and mutation, we have a big chance, that we will loose the
-     * best chromosome. Elitism first copies the best chromosome (or a few best
-     * chromosomes) to new population. The rest is done in classical way.
-     * Elitism can very rapidly increase performance of GA, because it prevents
-     * losing the best found solution.
-     */
-    public GeneticAlgorithm<T> setElitism(int elitism) {
-        if (elitism < 0 || elitism >= size) {
-            throw new IllegalArgumentException("Invalid elitism: " + elitism);
-        }
-        this.elitism = elitism;
-        return this;
-    }
-
-    /**
-     * Returns the number of best chromosomes to copy to new population.
-     */
-    public int getElitism() {
-        return elitism;
-    }
-
-    /**
-     * Set the tournament size and the best-player-wins probability in
-     * tournament selection.
-     * @param size the size of tournament pool.
-     * @param p the best-player-wins probability.
-     */
-    public GeneticAlgorithm<T> setTournament(int size, double p) {
-        if (size < 1) {
-            throw new IllegalArgumentException("Invalid tournament size: " + size);
-        }
-        
-        if (p < 0.5 || p > 1.0) {
-            throw new IllegalArgumentException("Invalid best-player-wins probability: " + p);
-        }
-        
-        tournamentSize = size;
-        tournamentProbability = p;
-        return this;
-    }
-
-    /**
-     * Returns the tournament size in tournament selection.
-     */
-    public int getTournamentSize() {
-        return tournamentSize;
-    }
-
-    /**
-     * Returns the best-player-wins probability in tournament selection.
-     */
-    public double getTournamentProbability() {
-        return tournamentProbability;
     }
 
     /**
@@ -359,15 +232,16 @@ public class GeneticAlgorithm <T extends Chromosome> {
         }
         
         // Calculate the fitness of each chromosome.
-        try {
-            MulticoreExecutor.run(tasks);
-        } catch (Exception ex) {
-            logger.error("Failed to run Genetic Algorithm on multi-core", ex);
-
-            for (Task task : tasks) {
-                task.call();
+        Arrays.stream(population).parallel().forEach(chromosome -> {
+            if (chromosome instanceof LamarckianChromosome) {
+                LamarckianChromosome ch = (LamarckianChromosome) chromosome;
+                for (int j = 0; j < t; j++) {
+                    ch.evolve();
+                }
             }
-        }
+
+            chromosome.fitness();
+        });
 
         Arrays.sort(population);
         T best = population[size-1];
@@ -379,10 +253,10 @@ public class GeneticAlgorithm <T extends Chromosome> {
             }
 
             for (int i = elitism; i < size; i+=2) {
-                T father = select(population);
-                T mother = select(population);
+                T father = selection.apply(population);
+                T mother = selection.apply(population);
                 while (mother == father) {
-                    mother = select(population);
+                    mother = selection.apply(population);
                 }
 
                 Chromosome[] children = father.crossover(mother);
@@ -396,15 +270,17 @@ public class GeneticAlgorithm <T extends Chromosome> {
 
             System.arraycopy(offsprings, 0, population, 0, size);
 
-            try {
-                MulticoreExecutor.run(tasks);
-            } catch (Exception ex) {
-                logger.error("Failed to run Genetic Algorithm on multi-core", ex);
-
-                for (Task task : tasks) {
-                    task.call();
+            // Calculate the fitness of each chromosome.
+            Arrays.stream(population).parallel().forEach(chromosome -> {
+                if (chromosome instanceof LamarckianChromosome) {
+                    LamarckianChromosome ch = (LamarckianChromosome) chromosome;
+                    for (int j = 0; j < t; j++) {
+                        ch.evolve();
+                    }
                 }
-            }
+
+                chromosome.fitness();
+            });
 
             Arrays.sort(population);
             best = population[size - 1];
@@ -415,102 +291,9 @@ public class GeneticAlgorithm <T extends Chromosome> {
             }
             avg /= size;
 
-            logger.info(String.format("Genetic Algorithm: generation %d, best fitness %g, average fitness %g", g, best.fitness(), avg));
+            logger.info(String.format("Generation %d, best fitness %G, average fitness %G", g, best.fitness(), avg));
         }
 
         return best;
-    }
-
-    /**
-     * Select a chromosome with replacement from the population based on their
-     * fitness. Note that the population should be in ascending order in terms
-     * of fitness.
-     */
-    @SuppressWarnings("unchecked")
-    private T select(T[] population) {
-        double worst = population[0].fitness();
-        double[] fitness = new double[size];
-        switch (selection) {
-            case ROULETTE_WHEEL:
-                if (worst > 0.0) {
-                    worst = 0.0;
-                }
-                
-                // In Roulete wheel selection, we don't do such scaling in
-                // general. However, in case of negative fitness socres,
-                // we need scale them to positive.
-                for (int i = 0; i < size; i++) {
-                    fitness[i] = population[i].fitness() - worst;
-                }
-
-                Math.unitize1(fitness);
-
-                return population[Math.random(fitness)];
-
-            case SCALED_ROULETTE_WHEEL:
-                for (int i = 0; i < size; i++) {
-                    fitness[i] = population[i].fitness() - worst;
-                }
-
-                Math.unitize1(fitness);
-
-                return population[Math.random(fitness)];
-
-            case RANK:
-                for (int i = 0; i < size; i++) {
-                    fitness[i] = i + 1;
-                }
-
-                Math.unitize1(fitness);
-
-                return population[Math.random(fitness)];
-
-            case TOURNAMENT:
-                Chromosome[] pool = new Chromosome[tournamentSize];
-                for (int i = 0; i < tournamentSize; i++) {
-                    pool[i] = population[Math.randomInt(size)];
-                }
-
-                Arrays.sort(pool);
-                for (int i = 1; i <= tournamentSize; i++) {
-                    double p = Math.random();
-                    if (p < tournamentProbability) {
-                        return (T) pool[tournamentSize - i];
-                    }
-                }
-                
-                return (T) pool[tournamentSize - 1];
-        }
-
-        return null;
-    }
-
-    /**
-     * Adapter for calculating fitness in thread pool.
-     */
-    class Task implements Callable<Task> {
-
-        /**
-         * The index of chromosome in the population.
-         */
-        final int i;
-
-        Task(int i) {
-            this.i = i;
-        }
-
-        @Override
-        public Task call() {
-            Chromosome chromosome = population[i];
-            if (chromosome instanceof LamarckianChromosome) {
-                LamarckianChromosome ch = (LamarckianChromosome) chromosome;
-                for (int j = 0; j < t; j++) {
-                    ch.evolve();
-                }
-            }
-            
-            chromosome.fitness();
-            return this;
-        }
     }
 }

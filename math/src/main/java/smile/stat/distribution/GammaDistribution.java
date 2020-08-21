@@ -1,22 +1,24 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.stat.distribution;
 
+import smile.math.MathEx;
 import smile.math.special.Gamma;
-import smile.math.Math;
 
 /**
  * The Gamma distribution is a continuous probability distributions with
@@ -49,10 +51,12 @@ import smile.math.Math;
  * @author Haifeng Li
  */
 public class GammaDistribution extends AbstractDistribution implements ExponentialFamily {
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
-    private double theta;
-    private double k;
+    /** The scale parameter. */
+    public final double theta;
+    /** The shape parameter. */
+    public final double k;
     private double logTheta;
     private double thetaGammaK;
     private double logGammaK;
@@ -82,9 +86,9 @@ public class GammaDistribution extends AbstractDistribution implements Exponenti
     }
 
     /**
-     * Constructor. Parameter will be estimated from the data by (approximate) MLE.
+     * Estimates the distribution parameters by (approximate) MLE.
      */
-    public GammaDistribution(double[] data) {
+    public static GammaDistribution fit(double[] data) {
         for (int i = 0; i < data.length; i++) {
             if (data[i] <= 0) {
                 throw new IllegalArgumentException("Samples contain non-positive values.");
@@ -101,31 +105,13 @@ public class GammaDistribution extends AbstractDistribution implements Exponenti
         mu /= data.length;
         s = Math.log(mu) - s / data.length;
 
-        k = (3 - s + Math.sqrt((Math.sqr(s - 3) + 24 * s))) / (12 * s);
-        theta = mu / k;
-
-        logTheta = Math.log(theta);
-        thetaGammaK = theta * Gamma.gamma(k);
-        logGammaK = Gamma.lgamma(k);
-        entropy = k + Math.log(theta) + Gamma.lgamma(k) + (1 - k) * Gamma.digamma(k);
-    }
-
-    /**
-     * Returns the scale parameter.
-     */
-    public double getScale() {
-        return theta;
-    }
-
-    /**
-     * Returns the shape parameter.
-     */
-    public double getShape() {
-        return k;
+        double shape = (3 - s + Math.sqrt((MathEx.sqr(s - 3) + 24 * s))) / (12 * s);
+        double scale = mu / shape;
+        return new GammaDistribution(shape, scale);
     }
 
     @Override
-    public int npara() {
+    public int length() {
         return 2;
     }
 
@@ -135,7 +121,7 @@ public class GammaDistribution extends AbstractDistribution implements Exponenti
     }
 
     @Override
-    public double var() {
+    public double variance() {
         return k * theta * theta;
     }
 
@@ -166,7 +152,7 @@ public class GammaDistribution extends AbstractDistribution implements Exponenti
         double r = 0.0;
 
         for (int i = 0; i < k; i++) {
-            r += Math.log(Math.random());
+            r += Math.log(MathEx.random());
         }
 
         r *= -theta;
@@ -214,7 +200,7 @@ public class GammaDistribution extends AbstractDistribution implements Exponenti
     public Mixture.Component M(double[] x, double[] posteriori) {
         double alpha = 0.0;
         double mean = 0.0;
-        double var = 0.0;
+        double variance = 0.0;
 
         for (int i = 0; i < x.length; i++) {
             alpha += posteriori[i];
@@ -225,16 +211,12 @@ public class GammaDistribution extends AbstractDistribution implements Exponenti
 
         for (int i = 0; i < x.length; i++) {
             double d = x[i] - mean;
-            var += d * d * posteriori[i];
+            variance += d * d * posteriori[i];
         }
 
-        var = var / alpha;
+        variance /= alpha;
 
-        Mixture.Component c = new Mixture.Component();
-        c.priori = alpha;
-        c.distribution = new GammaDistribution(mean * mean / var, var / mean);
-
-        return c;
+        return new Mixture.Component(alpha, new GammaDistribution(mean * mean / variance, variance / mean));
     }
 }
 

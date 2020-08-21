@@ -1,31 +1,36 @@
 /*******************************************************************************
- * Copyright (c) 2010 Haifeng Li
- *   
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *  
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2010-2020 Haifeng Li. All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *******************************************************************************/
+ * Smile is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Smile is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Smile.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 package smile.regression;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
-import smile.data.Attribute;
-import smile.data.AttributeDataset;
-import smile.data.NumericAttribute;
-import smile.math.Math;
-import smile.util.MulticoreExecutor;
-import smile.util.SmileUtils;
-import smile.validation.RMSE;
-import smile.validation.RegressionMeasure;
+import java.util.Arrays;
+import java.util.Properties;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
+import smile.base.cart.CART;
+import smile.base.cart.Loss;
+import smile.data.DataFrame;
+import smile.data.Tuple;
+import smile.data.formula.Formula;
+import smile.data.type.StructField;
+import smile.data.type.StructType;
+import smile.data.vector.BaseVector;
+import smile.feature.TreeSHAP;
+import smile.math.MathEx;
 
 /**
  * Random forest for regression. Random forest is an ensemble method that
@@ -66,19 +71,26 @@ import smile.validation.RegressionMeasure;
  * 
  * @author Haifeng Li
  */
-public class RandomForest implements Regression<double[]> {
-    private static final long serialVersionUID = 1L;
+public class RandomForest implements Regression<Tuple>, DataFrameRegression, TreeSHAP {
+    private static final long serialVersionUID = 2L;
+
+    /**
+     * The model formula.
+     */
+    private Formula formula;
 
     /**
      * Forest of regression trees.
      */
-    private List<RegressionTree> trees;
+    private RegressionTree[] trees;
+
     /**
      * Out-of-bag estimation of RMSE, which is quite accurate given that
      * enough trees have been grown (otherwise the OOB estimate can
      * bias upward).
      */
     private double error;
+
     /**
      * Variable importance. Every time a split of a node is made on variable
      * the impurity criterion for the two descendent nodes is less than the
@@ -89,486 +101,152 @@ public class RandomForest implements Regression<double[]> {
     private double[] importance;
 
     /**
-     * Values between [-1, 1] that represents monotonic regression coefficient for each attribute.
-     *
-     * It can be used to enforce model to keep monotonic relationship between target and the attribute.
-     * Positive value enforce target to be positively correlated with this feature.
-     * Positive value enforce target to be negatively correlated with this feature.
-     * Zero value turns off monotonic regression.
+     * Constructor.
+     * @param formula a symbolic description of the model to be fitted.
+     * @param trees forest of regression trees.
+     * @param error out-of-bag estimation of RMSE
+     * @param importance variable importance
      */
-    private double[] monotonicRegression;
-
-    /**
-     * Trainer for random forest.
-     */
-    public static class Trainer extends RegressionTrainer<double[]> {
-        /**
-         * The number of trees.
-         */
-        private int ntrees = 500;
-        /**
-         * The number of random selected features to be used to determine the decision
-         * at a node of the tree. floor(sqrt(dim)) seems to give generally good performance,
-         * where dim is the number of variables.
-         */
-        private int mtry = -1;
-        /**
-         * The minimum number of instances in leaf nodes.
-         */
-        private int nodeSize = 5;
-        /**
-         * The maximum number of leaf nodes in the tree.
-         */
-        private int maxNodes = 100;
-        /**
-         * The sampling rate.
-         */
-        private double subsample = 1.0;
-
-        /**
-         * Constructor.
-         *
-         * @param ntrees the number of trees.
-         */
-        public Trainer(int ntrees) {
-            if (ntrees < 1) {
-                throw new IllegalArgumentException("Invalid number of trees: " + ntrees);
-            }
-
-            this.ntrees = ntrees;
-        }
-
-        /**
-         * Constructor.
-         *
-         * @param attributes the attributes of independent variable.
-         * @param ntrees the number of trees.
-         */
-        public Trainer(Attribute[] attributes, int ntrees) {
-            super(attributes);
-
-            if (ntrees < 1) {
-                throw new IllegalArgumentException("Invalid number of trees: " + ntrees);
-            }
-
-            this.ntrees = ntrees;
-        }
-
-        /**
-         * Sets the number of trees in the random forest.
-         * @param ntrees the number of trees.
-         */
-        public Trainer setNumTrees(int ntrees) {
-            if (ntrees < 1) {
-                throw new IllegalArgumentException("Invalid number of trees: " + ntrees);
-            }
-
-            this.ntrees = ntrees;
-            return this;
-        }
-
-        /**
-         * Sets the number of random selected features for splitting.
-         * @param mtry the number of random selected features to be used to determine
-         * the decision at a node of the tree. p/3 seems to give
-         * generally good performance, where p is the number of variables.
-         */
-        public Trainer setNumRandomFeatures(int mtry) {
-            if (mtry < 1) {
-                throw new IllegalArgumentException("Invalid number of random selected features for splitting: " + mtry);
-            }
-
-            this.mtry = mtry;
-            return this;
-        }
-
-        /**
-         * Sets the maximum number of leaf nodes.
-         * @param maxNodes the maximum number of leaf nodes.
-         */
-        public Trainer setMaxNodes(int maxNodes) {
-            if (maxNodes < 2) {
-                throw new IllegalArgumentException("Invalid minimum size of leaf nodes: " + maxNodes);
-            }
-
-            this.maxNodes = maxNodes;
-            return this;
-        }
-
-        /**
-         * Sets the minimum size of leaf nodes.
-         * @param nodeSize the number of instances in a node below which the tree will not split.
-         */
-        public Trainer setNodeSize(int nodeSize) {
-            if (nodeSize < 1) {
-                throw new IllegalArgumentException("Invalid minimum size of leaf nodes: " + nodeSize);
-            }
-
-            this.nodeSize = nodeSize;
-            return this;
-        }
-
-        /**
-         * Sets the sampling rate.
-         * @param subsample the sampling rate.
-         */
-        public Trainer setSamplingRates(double subsample) {
-            if (subsample <= 0 || subsample > 1) {
-                throw new IllegalArgumentException("Invalid sampling rate: " + subsample);
-            }
-
-            this.subsample = subsample;
-            return this;
-        }
-
-        @Override
-        public RandomForest train(double[][] x, double[] y) {
-            return new RandomForest(attributes, x, y, ntrees, maxNodes, nodeSize, mtry, subsample);
-        }
+    public RandomForest(Formula formula, RegressionTree[] trees, double error, double[] importance) {
+        this.formula = formula;
+        this.trees = trees;
+        this.error = error;
+        this.importance = importance;
     }
 
     /**
-     * Trains a regression tree.
+     * Learns a random forest for regression.
+     *
+     * @param formula a symbolic description of the model to be fitted.
+     * @param data the data frame of the explanatory and response variables.
      */
-    static class TrainingTask implements Callable<RegressionTree> {
-        /**
-         * Attribute properties.
-         */
-        Attribute[] attributes;
-
-        /**
-         * Training instances.
-         */
-        double[][] x;
-        /**
-         * Training response variable.
-         */
-        double[] y;
-        /**
-         * The index of training values in ascending order. Note that only
-         * numeric attributes will be sorted.
-         */
-        int[][] order;
-        /**
-         * The number of variables to pick up in each node.
-         */
-        int mtry;
-        /**
-         * The minimum number of instances in leaf nodes.
-         */
-        int nodeSize = 5;
-        /**
-         * The maximum number of leaf nodes in the tree.
-         */
-        int maxNodes = 100;
-        /**
-         * The sampling rate.
-         */
-        double subsample = 1.0;
-
-        final double[] monotonicRegression;
-
-        /**
-         * Predictions of of out-of-bag samples.
-         */
-        double[] prediction;
-        /**
-         * Out-of-bag sample
-         */
-        int[] oob;
-
-        /**
-         * Constructor.
-         */
-        TrainingTask(Attribute[] attributes, double[][] x, double[] y, int maxNodes, int nodeSize, int mtry, double subsample, int[][] order, double[] prediction, int[] oob, double[] monotonicRegression) {
-            this.attributes = attributes;
-            this.monotonicRegression = monotonicRegression;
-            this.x = x;
-            this.y = y;
-            this.order = order;
-            this.mtry = mtry;
-            this.nodeSize = nodeSize;
-            this.maxNodes = maxNodes;
-            this.subsample = subsample;
-            this.prediction = prediction;
-            this.oob = oob;
-        }
-
-        @Override
-        public RegressionTree call() {
-            int n = x.length;
-            int[] samples = new int[n];
-
-            if (subsample == 1.0) {
-                // Training samples draw with replacement.
-                for (int i = 0; i < n; i++) {
-                    int xi = Math.randomInt(n);
-                    samples[xi]++;
-                }
-            } else {
-                // Training samples draw without replacement.
-                int[] perm = new int[n];
-                for (int i = 0; i < n; i++) {
-                    perm[i] = i;
-                }
-
-                Math.permutate(perm);
-                int m = (int) Math.round(n * subsample);
-                for (int i = 0; i < m; i++) {
-                    samples[perm[i]]++;
-                }
-            }
-
-            RegressionTree tree = new RegressionTree(attributes, x, y, maxNodes, nodeSize, mtry, order, samples, null, monotonicRegression);
-
-            for (int i = 0; i < n; i++) {
-                if (samples[i] == 0) {
-                    double pred = tree.predict(x[i]);
-                    synchronized (x[i]) {
-                        prediction[i] += pred;
-                        oob[i]++;
-                    }
-                }
-            }
-
-            return tree;
-        }
+    public static RandomForest fit(Formula formula, DataFrame data) {
+        return fit(formula, data, new Properties());
     }
 
     /**
-     * Constructor. Learns a random forest for regression.
+     * Learns a random forest for regression.
      *
-     * @param x the training instances.
-     * @param y the response variable.
-     * @param ntrees the number of trees.
+     * @param formula a symbolic description of the model to be fitted.
+     * @param data the data frame of the explanatory and response variables.
      */
-    public RandomForest(double[][] x, double[] y, int ntrees) {
-        this(null, x, y, ntrees);
+    public static RandomForest fit(Formula formula, DataFrame data, Properties prop) {
+        int ntrees = Integer.valueOf(prop.getProperty("smile.random.forest.trees", "500"));
+        int mtry = Integer.valueOf(prop.getProperty("smile.random.forest.mtry", "0"));
+        int maxDepth = Integer.valueOf(prop.getProperty("smile.random.forest.max.depth", "20"));
+        int maxNodes = Integer.valueOf(prop.getProperty("smile.random.forest.max.nodes", String.valueOf(data.size() / 5)));
+        int nodeSize = Integer.valueOf(prop.getProperty("smile.random.forest.node.size", "5"));
+        double subsample = Double.valueOf(prop.getProperty("smile.random.forest.sample.rate", "1.0"));
+        return fit(formula, data, ntrees, mtry, maxDepth, maxNodes, nodeSize, subsample);
     }
 
     /**
-     * Constructor. Learns a random forest for regression.
+     * Learns a random forest for regression.
      *
-     * @param x the training instances.
-     * @param y the response variable.
+     * @param formula a symbolic description of the model to be fitted.
+     * @param data the data frame of the explanatory and response variables.
      * @param ntrees the number of trees.
-     * @param mtry the number of input variables to be used to determine the decision
-     * at a node of the tree. p/3 seems to give generally good performance,
-     * where p is the number of variables.
-     * @param nodeSize the number of instances in a node below which the tree will
-     * not split, setting nodeSize = 5 generally gives good results.
-     * @param maxNodes the maximum number of leaf nodes in the tree.
-     */
-    public RandomForest(double[][] x, double[] y, int ntrees, int maxNodes, int nodeSize, int mtry) {
-        this(null, x, y, ntrees, maxNodes, nodeSize, mtry);
-    }
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param attributes the attribute properties.
-     * @param x the training instances.
-     * @param y the response variable.
-     * @param ntrees the number of trees.
-     */
-    public RandomForest(Attribute[] attributes, double[][] x, double[] y, int ntrees) {
-        this(attributes, x, y, ntrees, 100);
-    }
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param data the dataset
-     * @param ntrees the number of trees.
-     */
-    public RandomForest(AttributeDataset data, int ntrees) {
-        this(data.attributes(), data.x(), data.y(), ntrees);
-    }    
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param attributes the attribute properties.
-     * @param x the training instances.
-     * @param y the response variable.
-     * @param ntrees the number of trees.
-     * @param maxNodes the maximum number of leaf nodes in the tree.
-     */
-    public RandomForest(Attribute[] attributes, double[][] x, double[] y, int ntrees, int maxNodes) {
-        this(attributes, x, y, ntrees, maxNodes, 5);
-    }
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param data the dataset
-     * @param ntrees the number of trees.
-     * @param maxNodes the maximum number of leaf nodes in the tree.
-     */
-    public RandomForest(AttributeDataset data, int ntrees, int maxNodes) {
-        this(data.attributes(), data.x(), data.y(), ntrees, maxNodes);
-    }    
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param attributes the attribute properties.
-     * @param x the training instances.
-     * @param y the response variable.
-     * @param ntrees the number of trees.
-     * @param nodeSize the number of instances in a node below which the tree will
-     * not split, setting nodeSize = 5 generally gives good results.
-     * @param maxNodes the maximum number of leaf nodes in the tree.
-     */
-    public RandomForest(Attribute[] attributes, double[][] x, double[] y, int ntrees, int maxNodes, int nodeSize) {
-        this(attributes, x, y, ntrees, maxNodes, nodeSize, x[0].length / 3);
-    }
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param data the dataset
-     * @param ntrees the number of trees.
+     * @param mtry the number of input variables to be used to determine the
+     *             decision at a node of the tree. p/3 generally give good
+     *             performance, where p is the number of variables.
+     * @param maxDepth the maximum depth of the tree.
      * @param maxNodes the maximum number of leaf nodes in the tree.
      * @param nodeSize the number of instances in a node below which the tree will
-     * not split, setting nodeSize = 5 generally gives good results.
+     *                 not split, nodeSize = 5 generally gives good results.
+     * @param subsample the sampling rate for training tree. 1.0 means sampling with
+     *                  replacement. &lt; 1.0 means sampling without replacement.
      */
-    public RandomForest(AttributeDataset data, int ntrees, int maxNodes, int nodeSize) {
-        this(data.attributes(), data.x(), data.y(), ntrees, maxNodes, nodeSize);
-    }    
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param attributes the attribute properties.
-     * @param x the training instances.
-     * @param y the response variable.
-     * @param ntrees the number of trees.
-     * @param mtry the number of input variables to be used to determine the decision
-     * at a node of the tree. p/3 seems to give generally good performance,
-     * where dim is the number of variables.
-     * @param nodeSize the number of instances in a node below which the tree will
-     * not split, setting nodeSize = 5 generally gives good results.
-     * @param maxNodes the maximum number of leaf nodes in the tree.
-     */
-    public RandomForest(Attribute[] attributes, double[][] x, double[] y, int ntrees, int maxNodes, int nodeSize, int mtry) {
-        this(attributes, x, y, ntrees, maxNodes, nodeSize, mtry, 1.0);
+    public static RandomForest fit(Formula formula, DataFrame data, int ntrees, int mtry, int maxDepth, int maxNodes, int nodeSize, double subsample) {
+        return fit(formula, data, ntrees, mtry, maxDepth, maxNodes, nodeSize, subsample, null);
     }
 
     /**
-     * Constructor. Learns a random forest for regression.
+     * Learns a random forest for regression.
      *
-     * @param attributes the attribute properties.
-     * @param x the training instances.
-     * @param y the response variable.
+     * @param formula a symbolic description of the model to be fitted.
+     * @param data the data frame of the explanatory and response variables.
      * @param ntrees the number of trees.
-     * @param mtry the number of input variables to be used to determine the decision
-     * at a node of the tree. p/3 seems to give generally good performance,
-     * where dim is the number of variables.
-     * @param nodeSize the number of instances in a node below which the tree will
-     * not split, setting nodeSize = 5 generally gives good results.
+     * @param mtry the number of input variables to be used to determine the
+     *             decision at a node of the tree. p/3 generally give good
+     *             performance, where p is the number of variables.
+     * @param maxDepth the maximum depth of the tree.
      * @param maxNodes the maximum number of leaf nodes in the tree.
-     * @param subsample the sampling rate for training tree. 1.0 means sampling with replacement. < 1.0 means
-     *                  sampling without replacement.
-     */
-    public RandomForest(Attribute[] attributes, double[][] x, double[] y, int ntrees, int maxNodes, int nodeSize, int mtry, double subsample) {
-        this(attributes, x, y, ntrees, maxNodes, nodeSize, mtry, subsample, null);
-    }
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param data the dataset
-     * @param ntrees the number of trees.
-     * @param mtry the number of input variables to be used to determine the decision
-     * at a node of the tree. p/3 seems to give generally good performance,
-     * where dim is the number of variables.
      * @param nodeSize the number of instances in a node below which the tree will
-     * not split, setting nodeSize = 5 generally gives good results.
-     * @param maxNodes the maximum number of leaf nodes in the tree.
-     * @param subsample the sampling rate for training tree. 1.0 means sampling with replacement. < 1.0 means
-     *                  sampling without replacement.
+     *                 not split, nodeSize = 5 generally gives good results.
+     * @param subsample the sampling rate for training tree. 1.0 means sampling with
+     *                  replacement. &lt; 1.0 means sampling without replacement.
+     * @param seeds optional RNG seeds for each regression tree.
      */
-    public RandomForest(AttributeDataset data, int ntrees, int maxNodes, int nodeSize, int mtry, double subsample, double[] monotonicRegression) {
-        this(data.attributes(), data.x(), data.y(), ntrees, maxNodes, nodeSize, mtry, subsample, monotonicRegression);
-    }
-
-    /**
-     * Constructor. Learns a random forest for regression.
-     *
-     * @param attributes the attribute properties.
-     * @param x the training instances. 
-     * @param y the response variable.
-     * @param ntrees the number of trees.
-     * @param mtry the number of input variables to be used to determine the decision
-     * at a node of the tree. p/3 seems to give generally good performance,
-     * where dim is the number of variables.
-     * @param nodeSize the number of instances in a node below which the tree will
-     * not split, setting nodeSize = 5 generally gives good results.
-     * @param maxNodes the maximum number of leaf nodes in the tree.
-     * @param subsample the sampling rate for training tree. 1.0 means sampling with replacement. < 1.0 means
-     *                  sampling without replacement.
-     */
-    public RandomForest(Attribute[] attributes, double[][] x, double[] y, int ntrees, int maxNodes, int nodeSize, int mtry, double subsample, double[] monotonicRegression) {
-        if (x.length != y.length) {
-            throw new IllegalArgumentException(String.format("The sizes of X and Y don't match: %d != %d", x.length, y.length));
-        }
-
+    public static RandomForest fit(Formula formula, DataFrame data, int ntrees, int mtry, int maxDepth, int maxNodes, int nodeSize, double subsample, LongStream seeds) {
         if (ntrees < 1) {
             throw new IllegalArgumentException("Invalid number of trees: " + ntrees);
-        }
-
-        if (mtry < 1 || mtry > x[0].length) {
-            throw new IllegalArgumentException("Invalid number of variables to split on at a node of the tree: " + mtry);
-        }
-
-        if (nodeSize < 2) {
-            throw new IllegalArgumentException("Invalid minimum size of leaves: " + nodeSize);
-        }
-
-        if (maxNodes < 2) {
-            throw new IllegalArgumentException("Invalid maximum number of leaves: " + maxNodes);
         }
 
         if (subsample <= 0 || subsample > 1) {
             throw new IllegalArgumentException("Invalid sampling rate: " + subsample);
         }
 
-        if (attributes == null) {
-            int p = x[0].length;
-            attributes = new Attribute[p];
-            for (int i = 0; i < p; i++) {
-                attributes[i] = new NumericAttribute("V" + (i + 1));
-            }
+        formula = formula.expand(data.schema());
+        DataFrame x = formula.x(data);
+        BaseVector response = formula.y(data);
+        StructField field = response.field();
+        double[] y = response.toDoubleArray();
+
+        if (mtry > x.ncols()) {
+            throw new IllegalArgumentException("Invalid number of variables to split on at a node of the tree: " + mtry);
         }
 
-        int n = x.length;
+        int mtryFinal = mtry > 0 ? mtry : Math.max(x.ncols()/3, 1);
+
+        final int n = x.nrows();
         double[] prediction = new double[n];
         int[] oob = new int[n];
-        
-        int[][] order = SmileUtils.sort(attributes, x);
-        List<TrainingTask> tasks = new ArrayList<>();
-        for (int i = 0; i < ntrees; i++) {
-            tasks.add(new TrainingTask(attributes, x, y, maxNodes, nodeSize, mtry, subsample, order, prediction, oob, monotonicRegression));
-        }
-        
-        try {
-            trees = MulticoreExecutor.run(tasks);
-        } catch (Exception ex) {
-            ex.printStackTrace();
+        final int[][] order = CART.order(x);
 
-            trees = new ArrayList<>(ntrees);
-            for (int i = 0; i < ntrees; i++) {
-                trees.add(tasks.get(i).call());
-            }
+        // generate seeds with sequential stream
+        long[] seedArray = (seeds != null ? seeds : LongStream.range(-ntrees, 0)).sequential().distinct().limit(ntrees).toArray();
+        if (seedArray.length != ntrees) {
+            throw new IllegalArgumentException(String.format("seed stream has only %d distinct values, expected %d", seedArray.length, ntrees));
         }
-        
+
+        // train trees with parallel stream
+        RegressionTree[] trees = Arrays.stream(seedArray).parallel().mapToObj(seed -> {
+            // set RNG seed for the tree
+            if (seed > 1) MathEx.setSeed(seed);
+
+            final int[] samples = new int[n];
+            if (subsample == 1.0) {
+                // Training samples draw with replacement.
+                for (int i = 0; i < n; i++) {
+                    samples[MathEx.randomInt(n)]++;
+                }
+            } else {
+                // Training samples draw without replacement.
+                int[] permutation = MathEx.permutate(n);
+                int N = (int) Math.round(n * subsample);
+                for (int i = 0; i < N; i++) {
+                    samples[permutation[i]] = 1;
+                }
+            }
+
+            RegressionTree tree = new RegressionTree(x, Loss.ls(y), field, maxDepth, maxNodes, nodeSize, mtryFinal, samples, order);
+
+            IntStream.range(0, n).filter(i -> samples[i] == 0).forEach(i -> {
+                double pred = tree.predict(x.get(i));
+                prediction[i] += pred;
+                oob[i]++;
+            });
+
+            return tree;
+        }).toArray(RegressionTree[]::new);
+
         int m = 0;
+        double error = 0.0;
         for (int i = 0; i < n; i++) {
             if (oob[i] > 0) {
                 m++;
                 double pred = prediction[i] / oob[i];
-                error += Math.sqr(pred - y[i]);
+                error += MathEx.sqr(pred - y[i]);
             }
         }
 
@@ -576,35 +254,34 @@ public class RandomForest implements Regression<double[]> {
             error = Math.sqrt(error / m);
         }
 
-        importance = calculateImportance(trees, attributes.length);
+        double[] importance = calculateImportance(trees);
+        return new RandomForest(formula, trees, error, importance);
     }
 
     /**
      * Merges together two random forests and returns a new forest consisting of trees from both input forests.
      */
     public RandomForest merge(RandomForest other) {
-        if (this.importance.length != other.importance.length) {
+        if (!formula.equals(other.formula)) {
             throw new IllegalArgumentException("RandomForest have different sizes of feature vectors");
         }
 
-        ArrayList<RegressionTree> mergedTrees = new ArrayList<>();
-        mergedTrees.addAll(this.trees);
-        mergedTrees.addAll(other.trees);
+        RegressionTree[] forest = new RegressionTree[trees.length + other.trees.length];
+        System.arraycopy(trees, 0, forest, 0, trees.length);
+        System.arraycopy(other.trees, 0, forest, trees.length, other.trees.length);
 
-        double weightedMergedError = ((this.error * this.trees.size()) + (other.error * other.trees.size())) / (this.trees.size() + other.trees.size());
-        double[] mergedImportance = calculateImportance(mergedTrees, this.importance.length);
+        double mergedError = (this.error * other.error) / 2; // rough estimation
+        double[] mergedImportance = importance.clone();
+        for (int i = 0; i < importance.length; i++) {
+            mergedImportance[i] += other.importance[i];
+        }
 
-        return new RandomForest(mergedTrees, weightedMergedError, mergedImportance);
+        return new RandomForest(formula, forest, mergedError, mergedImportance);
     }
 
-    private RandomForest(List<RegressionTree> trees, double error, double[] importance) {
-        this.trees = trees;
-        this.error = error;
-        this.importance = importance;
-    }
-
-    private static double[] calculateImportance(List<RegressionTree> trees, int featuresCount) {
-        double[] importance = new double[featuresCount];
+    /** Returns the sum of importance of all trees. */
+    private static double[] calculateImportance(RegressionTree[] trees) {
+        double[] importance = new double[trees[0].importance().length];
         for (RegressionTree tree : trees) {
             double[] imp = tree.importance();
             for (int i = 0; i < imp.length; i++) {
@@ -612,6 +289,16 @@ public class RandomForest implements Regression<double[]> {
             }
         }
         return importance;
+    }
+
+    @Override
+    public Formula formula() {
+        return formula;
+    }
+
+    @Override
+    public StructType schema() {
+        return trees[0].schema();
     }
 
     /**
@@ -645,9 +332,14 @@ public class RandomForest implements Regression<double[]> {
      * @return the number of trees in the model 
      */
     public int size() {
-        return trees.size();
+        return trees.length;
     }
-    
+
+    @Override
+    public RegressionTree[] trees() {
+        return trees;
+    }
+
     /**
      * Trims the tree model set to a smaller size in case of over-fitting.
      * Or if extra decision trees in the model don't improve the performance,
@@ -657,7 +349,7 @@ public class RandomForest implements Regression<double[]> {
      * @param ntrees the new (smaller) size of tree model set.
      */
     public void trim(int ntrees) {
-        if (ntrees > trees.size()) {
+        if (ntrees > trees.length) {
             throw new IllegalArgumentException("The new model size is larger than the current size.");
         }
         
@@ -665,87 +357,44 @@ public class RandomForest implements Regression<double[]> {
             throw new IllegalArgumentException("Invalid new model size: " + ntrees);
         }
         
-        List<RegressionTree> model = new ArrayList<>(ntrees);
-        for (int i = 0; i < ntrees; i++) {
-            model.add(trees.get(i));
-        }
-        
+        RegressionTree[] model = new RegressionTree[ntrees];
+        System.arraycopy(trees, 0, model, 0, ntrees);
         trees = model;
     }
     
     @Override
-    public double predict(double[] x) {
+    public double predict(Tuple x) {
+        Tuple xt = formula.x(x);
         double y = 0;
         for (RegressionTree tree : trees) {
-            y += tree.predict(x);
+            y += tree.predict(xt);
         }
         
-        return y / trees.size();
+        return y / trees.length;
     }
-    
+
     /**
      * Test the model on a validation dataset.
-     * 
-     * @param x the test data set.
-     * @param y the test data response values.
-     * @return RMSEs with first 1, 2, ..., regression trees.
+     *
+     * @param data the test data set.
+     * @return the predictions with first 1, 2, ..., regression trees.
      */
-    public double[] test(double[][] x, double[] y) {
-        int T = trees.size();
-        double[] rmse = new double[T];
+    public double[][] test(DataFrame data) {
+        DataFrame x = formula.x(data);
 
-        int n = x.length;
-        double[] sum = new double[n];
-        double[] prediction = new double[n];
+        int n = x.nrows();
+        int ntrees = trees.length;
+        double[][] prediction = new double[ntrees][n];
 
-        RMSE measure = new RMSE();
-        
-        for (int i = 0, nt = 1; i < T; i++, nt++) {
-            for (int j = 0; j < n; j++) {
-                sum[j] += trees.get(i).predict(x[j]);
-                prediction[j] = sum[j] / nt;
-            }
-
-            rmse[i] = measure.measure(y, prediction);
-        }
-
-        return rmse;
-    }
-    
-    /**
-     * Test the model on a validation dataset.
-     * 
-     * @param x the test data set.
-     * @param y the test data output values.
-     * @param measures the performance measures of regression.
-     * @return performance measures with first 1, 2, ..., regression trees.
-     */
-    public double[][] test(double[][] x, double[] y, RegressionMeasure[] measures) {
-        int T = trees.size();
-        int m = measures.length;
-        double[][] results = new double[T][m];
-
-        int n = x.length;
-        double[] sum = new double[n];
-        double[] prediction = new double[n];
-
-        for (int i = 0, nt = 1; i < T; i++, nt++) {
-            for (int j = 0; j < n; j++) {
-                sum[j] += trees.get(i).predict(x[j]);
-                prediction[j] = sum[j] / nt;
-            }
-
-            for (int j = 0; j < m; j++) {
-                results[i][j] = measures[j].measure(y, prediction);
+        for (int j = 0; j < n; j++) {
+            Tuple xj = x.get(j);
+            double base = 0;
+            for (int i = 0; i < ntrees; i++) {
+                base = base + trees[i].predict(xj);
+                prediction[i][j] = base / (i+1);
             }
         }
-        return results;
-    }
 
-    /**
-     * Returns the regression trees.
-     */
-    public RegressionTree[] getTrees() {
-        return trees.toArray(new RegressionTree[trees.size()]);
+        return prediction;
     }
 }
